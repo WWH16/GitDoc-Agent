@@ -1,7 +1,5 @@
-import DOMPurify from 'dompurify'
 import { Check, CircleX, Download, FileText, Loader2, Moon, RefreshCw, Sun } from 'lucide-react'
-import { marked } from 'marked'
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -122,6 +120,7 @@ function Generate({ onFinished }: { onFinished: () => void }) {
   const [runId, setRunId] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [result, setResult] = useState<Result | null>(null)
+  const [html, setHtml] = useState('')
   const [error, setError] = useState('')
 
   function applyProgress(p: RunProgress | null) {
@@ -165,7 +164,12 @@ function Generate({ onFinished }: { onFinished: () => void }) {
     setElapsed(0)
     setError('')
     try {
-      setResult(await callWorkflow(url))
+      // Markdown libs (~25 KB gzip) are only needed for the preview: start loading them now, they arrive long before the run ends
+      const markdown = Promise.all([import('marked'), import('dompurify')])
+      const res = await callWorkflow(url)
+      const [{ marked }, { default: DOMPurify }] = await markdown
+      setHtml(res.preview ? DOMPurify.sanitize(marked.parse(res.preview, { async: false })) : '')
+      setResult(res)
       setPhase('done')
       onFinished()
     } catch (e) {
@@ -190,11 +194,6 @@ function Generate({ onFinished }: { onFinished: () => void }) {
 
   // Steps finished so far; all of them once done
   const completed = phase === 'done' ? STEPS.length : (step ?? 0)
-
-  const html = useMemo(
-    () => (result?.preview ? DOMPurify.sanitize(marked.parse(result.preview, { async: false })) : ''),
-    [result],
-  )
 
   return (
     <>
