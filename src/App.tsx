@@ -1,5 +1,5 @@
-import { Check, CircleX, Download, FileText, Loader2, Moon, RefreshCw, Sun } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Check, CircleX, Download, FileText, Loader2, Moon, Plus, RefreshCw, Send, Sun } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,8 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import {
+  MAX_QUESTION,
   STEPS,
   URL_PLACEHOLDER,
+  askRepo,
   callWorkflow,
   currentStep,
   getHistory,
@@ -34,6 +36,7 @@ const TONE: Record<Tone, string> = {
 
 const STATUS_TONE: Record<string, Tone> = {
   success: 'success',
+  failed: 'destructive',
   error: 'destructive',
   crashed: 'destructive',
   canceled: 'destructive',
@@ -45,7 +48,19 @@ const STATUS_TONE: Record<string, Tone> = {
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`)
 
+const PROSE =
+  'prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground'
+
+// Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
+async function renderMarkdown(md: string) {
+  const [{ marked }, { default: DOMPurify }] = await Promise.all([import('marked'), import('dompurify')])
+  return DOMPurify.sanitize(marked.parse(md, { async: false }))
+}
+
+type RepoProps = { repo: string; setRepo: (v: string) => void }
+
 export default function App() {
+  const [repo, setRepo] = useState('')
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [historyError, setHistoryError] = useState('')
 
@@ -70,12 +85,13 @@ export default function App() {
             <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
               <FileText className="size-4" />
             </span>
-            Doc Agent
+            GitDoc Agent
           </div>
           <div className="flex items-center gap-2">
             <TabsList>
               <TabsTrigger value="generate" className="px-3">Generate</TabsTrigger>
-              <TabsTrigger value="history" className="px-3">History</TabsTrigger>
+              <TabsTrigger value="ask" className="px-3">Ask</TabsTrigger>
+              <TabsTrigger value="history" className="px-3">Run history</TabsTrigger>
             </TabsList>
             <ThemeToggle />
           </div>
@@ -83,11 +99,14 @@ export default function App() {
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-4 py-10">
-        {/* forceMount keeps a running generation alive while History is open */}
+        {/* forceMount keeps every tab mounted: results, chat and a running generation survive tab switches */}
         <TabsContent value="generate" forceMount className="space-y-6 data-[state=inactive]:hidden">
-          <Generate onFinished={refresh} />
+          <Generate repo={repo} setRepo={setRepo} onFinished={refresh} />
         </TabsContent>
-        <TabsContent value="history" className="space-y-6">
+        <TabsContent value="ask" forceMount className="space-y-6 data-[state=inactive]:hidden">
+          <Ask repo={repo} setRepo={setRepo} />
+        </TabsContent>
+        <TabsContent value="history" forceMount className="space-y-6 data-[state=inactive]:hidden">
           <History runs={runs} error={historyError} onRefresh={refresh} />
         </TabsContent>
       </main>
@@ -112,8 +131,7 @@ function ThemeToggle() {
   )
 }
 
-function Generate({ onFinished }: { onFinished: () => void }) {
-  const [repo, setRepo] = useState('')
+function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () => void }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [step, setStep] = useState<number | null>(null)
   const [nodes, setNodes] = useState<NodeRun[]>([])
@@ -164,11 +182,8 @@ function Generate({ onFinished }: { onFinished: () => void }) {
     setElapsed(0)
     setError('')
     try {
-      // Markdown libs (~25 KB gzip) are only needed for the preview: start loading them now, they arrive long before the run ends
-      const markdown = Promise.all([import('marked'), import('dompurify')])
       const res = await callWorkflow(url)
-      const [{ marked }, { default: DOMPurify }] = await markdown
-      setHtml(res.preview ? DOMPurify.sanitize(marked.parse(res.preview, { async: false })) : '')
+      setHtml(await renderMarkdown(res.preview))
       setResult(res)
       setPhase('done')
       onFinished()
@@ -182,7 +197,8 @@ function Generate({ onFinished }: { onFinished: () => void }) {
   }
 
   function download() {
-    const blob = new Blob([result?.markdown ?? ''], { type: 'text/markdown' })
+    if (!result) return
+    const blob = new Blob([result.markdown], { type: 'text/markdown' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = 'DOCUMENTATION.md'
@@ -190,10 +206,11 @@ function Generate({ onFinished }: { onFinished: () => void }) {
     URL.revokeObjectURL(a.href)
   }
 
-  const status = { idle: 'idle', running: 'running', done: 'success', error: 'error' }[phase]
+  const status = { idle: 'idle', running: 'running', done: 'success', error: 'failed' }[phase]
 
   // Steps finished so far; all of them once done
   const completed = phase === 'done' ? STEPS.length : (step ?? 0)
+  const stepText = phase === 'done' ? 'Complete' : `Step ${completed + 1} of ${STEPS.length}: ${STEPS[completed][0]}`
 
   return (
     <>
@@ -209,18 +226,13 @@ function Generate({ onFinished }: { onFinished: () => void }) {
               Repository URL
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <GitHubIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="repo"
-                  value={repo}
-                  onChange={(e) => setRepo(e.target.value)}
-                  placeholder={URL_PLACEHOLDER}
-                  disabled={phase === 'running'}
-                  aria-invalid={phase === 'error'}
-                  className="pl-9"
-                />
-              </div>
+              <RepoInput
+                id="repo"
+                value={repo}
+                onChange={setRepo}
+                disabled={phase === 'running'}
+                invalid={phase === 'error'}
+              />
               <Button type="submit" disabled={phase === 'running'}>
                 {phase === 'running' && <Loader2 className="animate-spin" />}
                 {phase === 'running' ? 'Generating…' : 'Generate'}
@@ -251,9 +263,7 @@ function Generate({ onFinished }: { onFinished: () => void }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {completed} of {STEPS.length} steps
-              </span>
+              <span className="text-muted-foreground">{stepText}</span>
               <span className="font-medium tabular-nums">{clock(elapsed)}</span>
             </div>
             <Progress value={(completed / STEPS.length) * 100} />
@@ -295,7 +305,7 @@ function Generate({ onFinished }: { onFinished: () => void }) {
             <CardAction>
               <Button variant="outline" size="sm" onClick={download}>
                 <Download />
-                Download
+                Download .md
               </Button>
             </CardAction>
           </CardHeader>
@@ -308,6 +318,185 @@ function Generate({ onFinished }: { onFinished: () => void }) {
         </Card>
       )}
     </>
+  )
+}
+
+type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; sources: string[] }
+
+const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
+
+function Ask({ repo, setRepo }: RepoProps) {
+  // One sessionId per chat, so the backend keeps the conversation's context
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID())
+  const [messages, setMessages] = useState<Message[]>([])
+  const [question, setQuestion] = useState('')
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const end = useRef<HTMLDivElement>(null)
+  const noRepo = !repo.trim()
+
+  // Keep the newest message (or the waiting indicator) in view
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'nearest' })
+  }, [messages, pending])
+
+  async function send(text: string) {
+    const q = text.trim()
+    if (!q || noRepo || pending) return
+    setMessages((m) => [...m, { role: 'user', text: q }])
+    setQuestion('')
+    setError('')
+    setPending(true)
+    try {
+      const { answer, sources } = await askRepo(repo.trim(), q, sessionId)
+      const html = await renderMarkdown(answer)
+      setMessages((m) => [...m, { role: 'assistant', html, sources }])
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  function newChat() {
+    setMessages([])
+    setError('')
+    setSessionId(crypto.randomUUID())
+  }
+
+  return (
+    <>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Ask the Repo</h1>
+        <p className="text-sm text-muted-foreground">Answers come from the indexed source of the repository.</p>
+      </div>
+
+      <Card>
+        <CardContent className="space-y-3">
+          <label htmlFor="ask-repo" className="text-sm font-medium">
+            Repository URL
+          </label>
+          <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
+          {noRepo && (
+            <p className="text-sm text-muted-foreground">
+              Enter a repository URL first. Generate docs for it once so it gets indexed.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Chat</CardTitle>
+          <CardAction>
+            {/* Disabled while waiting, so a late answer never lands in the new chat */}
+            <Button variant="outline" size="sm" onClick={newChat} disabled={pending || messages.length === 0}>
+              <Plus />
+              New chat
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {messages.length === 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTIONS.map((s) => (
+                <Button key={s} variant="secondary" size="sm" disabled={noRepo || pending} onClick={() => send(s)}>
+                  {s}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <ol className="space-y-4" aria-live="polite">
+              {messages.map((m, i) => (
+                <li key={i} data-role={m.role} className="space-y-2">
+                  {m.role === 'user' && <p className="text-sm font-medium whitespace-pre-wrap">{m.text}</p>}
+                  {m.role === 'assistant' && (
+                    <>
+                      <article className={PROSE} dangerouslySetInnerHTML={{ __html: m.html }} />
+                      {m.sources.length > 0 && (
+                        <div className="text-sm">
+                          <p className="font-medium text-muted-foreground">Sources</p>
+                          <ul>
+                            {m.sources.map((src, j) => (
+                              <li key={j}>
+                                <code className="font-mono text-xs">{src}</code>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {pending && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+              <Loader2 className="size-4 animate-spin" />
+              Searching the code…
+            </p>
+          )}
+          {error && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+          <div ref={end} />
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              send(question)
+            }}
+            className="flex gap-2"
+          >
+            <Input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Ask a question about the code"
+              aria-label="Question"
+              maxLength={MAX_QUESTION}
+              disabled={pending}
+            />
+            <Button type="submit" disabled={pending || noRepo || !question.trim()}>
+              <Send />
+              Ask
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+
+function RepoInput({
+  id,
+  value,
+  onChange,
+  disabled,
+  invalid,
+}: {
+  id: string
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+  invalid?: boolean
+}) {
+  return (
+    <div className="relative flex-1">
+      <GitHubIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={URL_PLACEHOLDER}
+        disabled={disabled}
+        aria-invalid={invalid}
+        className="pl-9"
+      />
+    </div>
   )
 }
 

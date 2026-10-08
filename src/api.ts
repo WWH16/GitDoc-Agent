@@ -2,7 +2,9 @@
 
 export const URL_PLACEHOLDER = 'https://github.com/<username>/<repo-name>'
 
-export type Result = { markdown?: string; preview?: string }
+export type Result = { markdown: string; preview: string }
+
+export type Answer = { answer: string; sources: string[] }
 
 export type Run = { id: string; status: string; started: string; finished: string }
 
@@ -32,35 +34,70 @@ export const STEPS: [string, string | null][] = [
 export const currentStep = (doneNodes: Set<string>) =>
   STEPS.findLastIndex(([, start]) => start === null || doneNodes.has(start))
 
-export async function callWorkflow(repo: string): Promise<Result> {
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+
+/** POST JSON through the dev proxy. A non-2xx response throws body.error or body.message if present, otherwise "HTTP <status>". */
+async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   let r: Response
   try {
-    r = await fetch('/api/generate', {
+    r = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo }),
+      body: JSON.stringify(body),
     })
-  } catch (e) {
-    throw new Error(`Could not reach the workflow: ${(e as Error).message}`)
+  } catch {
+    throw new Error('Could not reach n8n')
   }
-  if (r.status === 400) {
-    const body = await r.json().catch(() => ({}))
-    throw new Error(body.error || 'Invalid GitHub URL')
-  }
-  if (!r.ok) throw new Error(`Could not reach the workflow: HTTP ${r.status}`)
-  return r.json()
+  const data: unknown = await r.json().catch(() => null)
+  const error = isObject(data) && typeof data.error === 'string' ? data.error : ''
+  // n8n's own failures (e.g. unregistered webhook) send { message } instead of { error }
+  const message = isObject(data) && typeof data.message === 'string' ? data.message : ''
+  if (!r.ok) throw new Error(error || message || `HTTP ${r.status}`)
+  // n8n "Respond to Webhook" nodes answer 200 unless a response code is set, so an error body counts as an error too
+  if (error) throw new Error(error)
+  if (!isObject(data)) throw new Error('The workflow returned an invalid response.')
+  return data
 }
 
+export async function callWorkflow(repo: string): Promise<Result> {
+  const data = await post('/api/generate', { repo })
+  if (typeof data.markdown !== 'string') throw new Error('The workflow returned no documentation.')
+  // Without a preview, fall back to the raw markdown (diagrams stay as code blocks)
+  return { markdown: data.markdown, preview: typeof data.preview === 'string' ? data.preview : data.markdown }
+}
+
+export const MAX_QUESTION = 1000
+
+export async function askRepo(repo: string, question: string, sessionId: string): Promise<Answer> {
+  const data = await post('/api/ask', { repo, question, sessionId })
+  if (typeof data.answer !== 'string') throw new Error('The assistant returned no answer.')
+  const sources = Array.isArray(data.sources) ? data.sources.filter((s): s is string => typeof s === 'string') : []
+  return { answer: data.answer, sources }
+}
+
+/** n8n executions for this workflow; the proxy adds workflowId and the API key. Entries without an id are dropped. */
+async function executions(query: string): Promise<Execution[]> {
+  const r = await fetch(`/api/executions?${query}`)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  const body: unknown = await r.json().catch(() => null)
+  if (!isObject(body) || !Array.isArray(body.data)) throw new Error('Invalid response from n8n.')
+  return body.data
+    .filter((e): e is Execution => isObject(e) && (typeof e.id === 'string' || typeof e.id === 'number'))
+    .map((e) => ({ ...e, id: String(e.id) }))
+}
+
+const str = (v: unknown) => (typeof v === 'string' ? v : '')
+
 // sv-SE formats as YYYY-MM-DD HH:MM:SS in local time
-const localTime = (stamp?: string) => (stamp ? new Date(stamp).toLocaleString('sv-SE') : '')
+function localTime(stamp: unknown) {
+  const s = str(stamp), d = new Date(s)
+  return s && !isNaN(+d) ? d.toLocaleString('sv-SE') : ''
+}
 
 export async function getHistory(): Promise<Run[]> {
-  const r = await fetch('/api/executions?limit=20')
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  const data: Execution[] = (await r.json()).data ?? []
-  return data.map((e) => ({
+  return (await executions('limit=20')).map((e) => ({
     id: e.id,
-    status: e.status ?? '',
+    status: str(e.status),
     started: localTime(e.startedAt),
     finished: localTime(e.stoppedAt),
   }))
@@ -92,10 +129,13 @@ export type Progress = { id: string; nodes: NodeRun[] }
 /** Latest execution that matches `query`, as a node timeline. Default: the running one.
  *  n8n only fills runData during a run when the workflow's "Save execution progress" setting is on. */
 export async function getProgress(query = 'status=running'): Promise<Progress | null> {
-  const r = await fetch(`/api/executions?${query}&limit=1&includeData=true`)
-  if (!r.ok) return null
-  const run: Execution | undefined = (await r.json()).data?.[0]
+  const run = (await executions(`${query}&limit=1&includeData=true`))[0]
   if (!run) return null
-  const running = run.status === 'running' ? (run.data?.executionData?.nodeExecutionStack?.[0]?.node?.name ?? null) : null
-  return { id: run.id, nodes: timeline(run.data?.resultData?.runData ?? {}, running) }
+  const raw = run.data?.resultData?.runData
+  // Keep only nodes with at least one task so timeline() can read tasks[0]
+  const runData: Record<string, TaskData[]> = isObject(raw)
+    ? Object.fromEntries(Object.entries(raw).filter(([, t]) => Array.isArray(t) && t.length > 0 && isObject(t[0])))
+    : {}
+  const head = run.status === 'running' ? run.data?.executionData?.nodeExecutionStack?.[0]?.node?.name : undefined
+  return { id: run.id, nodes: timeline(runData, typeof head === 'string' ? head : null) }
 }

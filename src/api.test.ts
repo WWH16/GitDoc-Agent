@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { currentStep, showProgressHint, timeline } from './api.ts'
+import { askRepo, callWorkflow, currentStep, getHistory, showProgressHint, timeline } from './api.ts'
+
+const reply = (status: number, body: unknown) => {
+  globalThis.fetch = async () => new Response(JSON.stringify(body), { status })
+}
 
 test('orders nodes by first start time', () => {
   const t = timeline({ B: [{ startTime: 20, executionTime: 5 }], A: [{ startTime: 10, executionTime: 3 }] }, null)
@@ -44,4 +48,44 @@ test('progress hint shows only after 10 s with no finished nodes', () => {
 test('currentStep still maps finished nodes to coarse steps', () => {
   assert.equal(currentStep(new Set()), 0)
   assert.equal(currentStep(new Set(['Valid GitHub URL?', 'Group Files'])), 2)
+})
+
+test('non-2xx shows body.error, else HTTP <status>', async () => {
+  reply(503, { error: 'AI busy' })
+  await assert.rejects(askRepo('r', 'q', 's'), /^Error: AI busy$/)
+  reply(404, { code: 404, message: 'webhook not registered' })
+  await assert.rejects(askRepo('r', 'q', 's'), /^Error: webhook not registered$/)
+  reply(500, 'oops')
+  await assert.rejects(callWorkflow('r'), /^Error: HTTP 500$/)
+})
+
+test('askRepo keeps only string sources', async () => {
+  reply(200, { answer: 'A', sources: ['a.ts', 3, null, 'b.ts'] })
+  assert.deepEqual(await askRepo('r', 'q', 's'), { answer: 'A', sources: ['a.ts', 'b.ts'] })
+  reply(200, { answer: 'A', sources: 'a.ts' })
+  assert.deepEqual((await askRepo('r', 'q', 's')).sources, [])
+})
+
+test('callWorkflow requires markdown and falls back to it for preview', async () => {
+  reply(200, { markdown: '# Doc' })
+  assert.deepEqual(await callWorkflow('r'), { markdown: '# Doc', preview: '# Doc' })
+  reply(200, { preview: 'x' })
+  await assert.rejects(callWorkflow('r'))
+})
+
+test('getHistory drops entries without an id and blanks bad dates', async () => {
+  reply(200, { data: [{ id: 7, status: 'success', startedAt: 'nope' }, { status: 'error' }] })
+  assert.deepEqual(await getHistory(), [{ id: '7', status: 'success', started: '', finished: '' }])
+})
+
+test('network failure on ask gives a fixed message', async () => {
+  globalThis.fetch = async () => {
+    throw new TypeError('Failed to fetch')
+  }
+  await assert.rejects(askRepo('r', 'q', 's'), /^Error: Could not reach n8n$/)
+})
+
+test('200 with an error body is treated as an error', async () => {
+  reply(200, { error: 'blocked' })
+  await assert.rejects(askRepo('r', 'q', 's'), /^Error: blocked$/)
 })
