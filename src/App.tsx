@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -52,6 +52,10 @@ const FAILED = new Set(['error', 'crashed', 'canceled'])
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`)
 
+// Rendered markdown (docs preview and chat answers) reads at body size; inline code drops the backticks
+const PROSE =
+  'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none'
+
 // Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
 async function renderMarkdown(md: string) {
   const [{ marked }, { default: DOMPurify }] = await Promise.all([import('marked'), import('dompurify')])
@@ -81,14 +85,15 @@ export default function App() {
   return (
     <Tabs defaultValue="generate" className="min-h-screen gap-0">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 px-4 sm:h-14 sm:gap-4">
           <div className="flex items-center gap-2 font-semibold">
             <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
               <FileText className="size-4" />
             </span>
-            GitDoc Agent
+            {/* Name hides on phones so the header fits 375px; screen readers still get it */}
+            <span className="sr-only sm:not-sr-only">GitDoc Agent</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <TabsList>
               <TabsTrigger value="generate" className="px-3">Generate</TabsTrigger>
               <TabsTrigger value="ask" className="px-3">Ask</TabsTrigger>
@@ -115,19 +120,33 @@ export default function App() {
   )
 }
 
-// index.html applies the saved or system theme before first paint; this only flips it
+const THEMES = ['light', 'dark', 'system'] as const
+
+// index.html applies the saved theme before first paint; this cycles light, dark, system
 function ThemeToggle() {
-  function toggle() {
-    const dark = document.documentElement.classList.toggle('dark')
+  const [theme, setTheme] = useState<(typeof THEMES)[number]>(() => {
     try {
-      localStorage.setItem('theme', dark ? 'dark' : 'light')
+      const t = localStorage.getItem('theme')
+      return THEMES.find((x) => x === t) ?? 'system'
+    } catch {
+      return 'system'
+    }
+  })
+  const Icon = { light: Sun, dark: Moon, system: Monitor }[theme]
+
+  function cycle() {
+    const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
+    setTheme(next)
+    const dark = next === 'dark' || (next === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+    document.documentElement.classList.toggle('dark', dark)
+    try {
+      localStorage.setItem('theme', next)
     } catch {}
   }
 
   return (
-    <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggle}>
-      <Sun className="scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-      <Moon className="absolute scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+    <Button variant="ghost" size="icon" aria-label={`Theme: ${theme}. Change theme`} title={`Theme: ${theme}`} onClick={cycle}>
+      <Icon />
     </Button>
   )
 }
@@ -286,13 +305,13 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
             </div>
             <Progress value={(completed / STEPS.length) * 100} />
             {phase === 'running' && showProgressHint(elapsed, nodes) && (
-              <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+              <p className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
                 n8n is not reporting live progress. In n8n, open this workflow's Settings and set "Save execution
                 progress" to Save.
               </p>
             )}
             {nodes.length > 0 && (
-              <ol className="divide-y rounded-md border text-sm">
+              <ol className="divide-y rounded-xl border text-sm">
                 {nodes.map((n) => (
                   <li key={n.name} className="flex items-center gap-3 px-3 py-2">
                     {n.status === 'running' ? (
@@ -328,10 +347,7 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
             </CardAction>
           </CardHeader>
           <CardContent>
-            <article
-              className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground"
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
+            <article className={PROSE} dangerouslySetInnerHTML={{ __html: html }} />
           </CardContent>
         </Card>
       )}
@@ -340,10 +356,6 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
 }
 
 type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; sources: string[] }
-
-// Chat answers read at body size, with inline code shown without backticks
-const CHAT_PROSE =
-  'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none'
 
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
@@ -394,7 +406,7 @@ function Ask({ repo, setRepo }: RepoProps) {
         e.preventDefault()
         send(question)
       }}
-      className="flex items-end gap-2 rounded-3xl border bg-card p-2 pl-4 shadow-sm transition-colors focus-within:border-ring"
+      className="flex items-end gap-2 rounded-2xl border bg-card p-2 pl-4 shadow-sm transition-colors focus-within:border-ring"
     >
       {/* field-sizing grows the textarea with its content, up to max-h */}
       <textarea
@@ -462,14 +474,15 @@ function Ask({ repo, setRepo }: RepoProps) {
         </div>
       ) : (
         <>
+          <h1 className="sr-only">Ask the repo</h1>
           <ol className="flex-1 space-y-8 py-8" aria-live="polite">
             {messages.map((m, i) => (
               <li key={i} data-role={m.role}>
                 {m.role === 'user' ? (
-                  <p className="ml-auto w-fit max-w-[85%] rounded-3xl bg-muted px-4 py-2.5 whitespace-pre-wrap">{m.text}</p>
+                  <p className="ml-auto w-fit max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 whitespace-pre-wrap">{m.text}</p>
                 ) : (
                   <div className="space-y-3">
-                    <article className={CHAT_PROSE} dangerouslySetInnerHTML={{ __html: m.html }} />
+                    <article className={PROSE} dangerouslySetInnerHTML={{ __html: m.html }} />
                     {m.sources.length > 0 && (
                       <details className="group">
                         <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-2 py-1 -ml-2 text-xs text-muted-foreground transition-colors select-none hover:bg-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
@@ -494,7 +507,7 @@ function Ask({ repo, setRepo }: RepoProps) {
               </li>
             ))}
             {pending && (
-              <li className="animate-pulse text-sm text-muted-foreground" role="status">
+              <li className="text-sm motion-safe:animate-pulse text-muted-foreground" role="status">
                 Searching the code…
               </li>
             )}

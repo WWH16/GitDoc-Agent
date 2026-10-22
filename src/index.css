@@ -5,7 +5,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn/ui "neutral" theme. Light by default, `.dark` on <html> switches. */
+/* shadcn/ui "neutral" theme. Light by default, `.dark` on <html> switches.
+   Radius rule: controls (buttons, inputs, tabs, badges) are full pills; surfaces (cards, composer, bubbles) are rounded-2xl; boxes nested in a surface are rounded-xl. */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -25,9 +26,10 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --success: oklch(0.6 0.15 150);
-  --warning: oklch(0.65 0.15 70);
+  /* ring, success and warning are dark enough for 3:1 focus and 4.5:1 text on white */
+  --ring: oklch(0.556 0 0);
+  --success: oklch(0.5 0.13 150);
+  --warning: oklch(0.52 0.12 65);
 }
 
 .dark {
@@ -54,7 +56,7 @@
 }
 
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
