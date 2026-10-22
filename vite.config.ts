@@ -26,7 +26,8 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api/generate': hook(webhookPath, 300_000),
-        '/api/ask': hook(askPath, 120_000),
+        // Ask can take 2+ minutes: each Gemini call on the free tier takes ~20 s and the agent makes several
+        '/api/ask': hook(askPath, 300_000),
         '/api/executions': {
           target: n8n,
           changeOrigin: true,

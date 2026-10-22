@@ -46,7 +46,8 @@ async function post(path: string, body: unknown): Promise<Record<string, unknown
       body: JSON.stringify(body),
     })
   } catch {
-    throw new Error('Could not reach n8n')
+    // Also hit when the dev proxy gives up on a slow run (vite.config.ts timeouts)
+    throw new Error('No response from n8n. It may be stopped, or the run took too long.')
   }
   const data: unknown = await r.json().catch(() => null)
   const error = isObject(data) && typeof data.error === 'string' ? data.error : ''

@@ -82,7 +82,7 @@ test('network failure on ask gives a fixed message', async () => {
   globalThis.fetch = async () => {
     throw new TypeError('Failed to fetch')
   }
-  await assert.rejects(askRepo('r', 'q', 's'), /^Error: Could not reach n8n$/)
+  await assert.rejects(askRepo('r', 'q', 's'), /^Error: No response from n8n/)
 })
 
 test('200 with an error body is treated as an error', async () => {
