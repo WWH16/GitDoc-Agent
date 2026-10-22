@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -87,9 +87,15 @@ export default function App() {
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4">
           <div className="flex items-center gap-2 font-semibold">
-            <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
-              <FileText className="size-4" />
-            </span>
+            {/* Small-cut logo from brand/kit; the D follows the text colour so it flips in dark mode */}
+            <svg viewBox="46 40 154 176" aria-hidden="true" className="h-7 w-auto text-foreground">
+              <path
+                fill="currentColor"
+                fillRule="evenodd"
+                d="M66 40H122A88 88 0 0 1 122 216H66A20 20 0 0 1 46 196V60A20 20 0 0 1 66 40ZM108.64 99.06A21 21 0 1 0 83 101.89L83 154.11A21 21 0 1 0 105 154.11L105 128A55 55 0 0 0 138 139H154V117H138A33 33 0 0 1 108.64 99.06Z"
+              />
+              <circle cx="154" cy="128" r="24" fill="#FF5A36" />
+            </svg>
             {/* Name hides on phones so the header fits 375px; screen readers still get it */}
             <span className="sr-only sm:not-sr-only">GitDoc Agent</span>
           </div>

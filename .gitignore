@@ -27,3 +27,4 @@ dist-ssr
 .env
 pinecone credentials.txt
 .claude/
+brand
