@@ -54,7 +54,7 @@ const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixe
 
 // Rendered markdown (docs preview and chat answers) reads at body size; inline code drops the backticks
 const PROSE =
-  'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none'
+  'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none prose-table:block prose-table:overflow-x-auto'
 
 // Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
 async function renderMarkdown(md: string) {
@@ -85,7 +85,7 @@ export default function App() {
   return (
     <Tabs defaultValue="generate" className="min-h-screen gap-0">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 px-4 sm:h-14 sm:gap-4">
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4">
           <div className="flex items-center gap-2 font-semibold">
             <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
               <FileText className="size-4" />
@@ -95,24 +95,24 @@ export default function App() {
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <TabsList>
-              <TabsTrigger value="generate" className="px-3">Generate</TabsTrigger>
-              <TabsTrigger value="ask" className="px-3">Ask</TabsTrigger>
-              <TabsTrigger value="history" className="px-3">Run history</TabsTrigger>
+              <TabsTrigger value="generate" className="sm:px-3">Generate</TabsTrigger>
+              <TabsTrigger value="ask" className="sm:px-3">Ask</TabsTrigger>
+              <TabsTrigger value="history" className="sm:px-3">Run history</TabsTrigger>
             </TabsList>
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl px-4 py-10">
+      <main className="mx-auto w-full max-w-3xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-6 sm:py-10">
         {/* forceMount keeps every tab mounted: results, chat and a running generation survive tab switches */}
-        <TabsContent value="generate" forceMount className="space-y-6 data-[state=inactive]:hidden">
+        <TabsContent value="generate" forceMount className="space-y-6 data-[state=inactive]:hidden sm:space-y-8">
           <Generate repo={repo} setRepo={setRepo} onFinished={refresh} />
         </TabsContent>
-        <TabsContent value="ask" forceMount className="space-y-6 data-[state=inactive]:hidden">
+        <TabsContent value="ask" forceMount className="space-y-6 data-[state=inactive]:hidden sm:space-y-8">
           <Ask repo={repo} setRepo={setRepo} />
         </TabsContent>
-        <TabsContent value="history" forceMount className="space-y-6 data-[state=inactive]:hidden">
+        <TabsContent value="history" forceMount className="space-y-6 data-[state=inactive]:hidden sm:space-y-8">
           <History runs={runs} error={historyError} onRefresh={refresh} />
         </TabsContent>
       </main>
@@ -252,42 +252,38 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
         <p className="text-sm text-muted-foreground">Turn any GitHub repository into readable docs with diagrams.</p>
       </div>
 
-      <Card>
-        <CardContent>
-          <form onSubmit={generate} className="space-y-3">
-            <label htmlFor="repo" className="text-sm font-medium">
-              Repository URL
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <RepoInput
-                id="repo"
-                value={repo}
-                onChange={setRepo}
-                disabled={phase === 'running'}
-                invalid={phase === 'error'}
-              />
-              <Button type="submit" disabled={phase === 'running'}>
-                {phase === 'running' && <Loader2 className="animate-spin" />}
-                {phase === 'running' ? 'Generating…' : 'Generate'}
-              </Button>
-            </div>
-            <p
-              className={cn(
-                'text-sm',
-                phase === 'error' ? 'text-destructive' : phase === 'partial' ? 'text-warning' : 'text-muted-foreground',
-              )}
-              role={phase === 'error' || phase === 'partial' ? 'alert' : undefined}
-              aria-live="polite"
-            >
-              {phase === 'idle' && 'Paste a public GitHub URL and press Enter.'}
-              {phase === 'running' && 'This usually takes a few minutes. Keep this tab open.'}
-              {phase === 'done' && `Documentation generated in ${clock(elapsed)}.`}
-              {phase === 'partial' && `Documentation generated in ${clock(elapsed)}, but the run failed after that, so Ask may not know this repo. ${error}`}
-              {phase === 'error' && error}
-            </p>
-          </form>
-        </CardContent>
-      </Card>
+      <form onSubmit={generate} className="space-y-2">
+        <label htmlFor="repo" className="block text-sm font-medium">
+          Repository URL
+        </label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <RepoInput
+            id="repo"
+            value={repo}
+            onChange={setRepo}
+            disabled={phase === 'running'}
+            invalid={phase === 'error'}
+          />
+          <Button type="submit" disabled={phase === 'running'}>
+            {phase === 'running' && <Loader2 className="animate-spin" />}
+            {phase === 'running' ? 'Generating…' : 'Generate'}
+          </Button>
+        </div>
+        <p
+          className={cn(
+            'text-sm',
+            phase === 'error' ? 'text-destructive' : phase === 'partial' ? 'text-warning' : 'text-muted-foreground',
+          )}
+          role={phase === 'error' || phase === 'partial' ? 'alert' : undefined}
+          aria-live="polite"
+        >
+          {phase === 'idle' && 'Paste a public GitHub URL and press Enter.'}
+          {phase === 'running' && 'This usually takes a few minutes. Keep this tab open.'}
+          {phase === 'done' && `Documentation generated in ${clock(elapsed)}.`}
+          {phase === 'partial' && `Documentation generated in ${clock(elapsed)}, but the run failed after that, so Ask may not know this repo. ${error}`}
+          {phase === 'error' && error}
+        </p>
+      </form>
 
       {phase !== 'idle' && (
         <Card>
@@ -418,7 +414,7 @@ function Ask({ repo, setRepo }: RepoProps) {
             send(question)
           }
         }}
-        placeholder={noRepo ? 'Enter a repository URL above first' : 'Ask anything about the code'}
+        placeholder={noRepo ? 'Enter a repo URL above first' : 'Ask anything about the code'}
         aria-label="Question"
         rows={1}
         maxLength={MAX_QUESTION}
@@ -438,7 +434,7 @@ function Ask({ repo, setRepo }: RepoProps) {
   )
 
   return (
-    <div className="flex min-h-[calc(100dvh-9rem)] flex-col">
+    <div className="flex min-h-[calc(100dvh-7rem)] flex-col sm:min-h-[calc(100dvh-8.5rem)]">
       <div className="flex items-center gap-2">
         <div className="max-w-sm flex-1">
           <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
@@ -451,7 +447,7 @@ function Ask({ repo, setRepo }: RepoProps) {
       </div>
 
       {empty ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-16">
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 pt-8 pb-16">
           <h1 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl">What do you want to know?</h1>
           <div className="w-full">{composer}</div>
           <div className="flex flex-wrap justify-center gap-2">
@@ -520,7 +516,7 @@ function Ask({ repo, setRepo }: RepoProps) {
           {/* scroll-margin keeps the newest message clear of the sticky composer */}
           <div ref={end} className="scroll-mb-40" />
 
-          <div className="sticky bottom-0 bg-background pb-4">
+          <div className="sticky bottom-0 bg-background pb-[max(1rem,env(safe-area-inset-bottom))]">
             {composer}
           </div>
         </>
@@ -566,9 +562,9 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
           <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
           <p className="text-sm text-muted-foreground">The 20 most recent workflow executions.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onRefresh}>
+        <Button variant="outline" size="sm" onClick={onRefresh} aria-label="Refresh" className="shrink-0">
           <RefreshCw />
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
 
@@ -586,7 +582,7 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
                 <TableHead className="pl-4">ID</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Started</TableHead>
-                <TableHead className="pr-4">Finished</TableHead>
+                <TableHead className="hidden pr-4 sm:table-cell">Finished</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -598,8 +594,11 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
                       {r.status || 'unknown'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{r.started || '—'}</TableCell>
-                  <TableCell className="pr-4 tabular-nums text-muted-foreground">{r.finished || '—'}</TableCell>
+                  <TableCell className="pr-4 tabular-nums text-muted-foreground sm:pr-2">
+                    {r.started || '—'}
+                    {r.finished && <span className="block text-xs sm:hidden">Finished {r.finished.slice(11)}</span>}
+                  </TableCell>
+                  <TableCell className="hidden pr-4 tabular-nums text-muted-foreground sm:table-cell">{r.finished || '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
