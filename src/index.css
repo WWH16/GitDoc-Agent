@@ -30,6 +30,8 @@
   --ring: oklch(0.556 0 0);
   --success: oklch(0.5 0.13 150);
   --warning: oklch(0.52 0.12 65);
+  /* Commit Orange (#FF5A36) from the logo: graphics only, never text on white (3.1:1) */
+  --brand: oklch(0.684 0.207 33.86);
 }
 
 .dark {
@@ -81,6 +83,7 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-brand: var(--brand);
 }
 
 @layer base {
@@ -89,5 +92,13 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* Browser surfaces in the palette: brand-tinted selection and caret, scrollbars in the border colour */
+  html {
+    scrollbar-color: var(--border) transparent;
+    caret-color: var(--brand);
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--brand) 25%, transparent);
   }
 }

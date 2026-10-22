@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Logo } from '@/components/logo'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -86,19 +87,7 @@ export default function App() {
     <Tabs defaultValue="generate" className="min-h-screen gap-0">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4">
-          <div className="flex items-center gap-2 font-semibold">
-            {/* Small-cut logo from brand/kit; the D follows the text colour so it flips in dark mode */}
-            <svg viewBox="46 40 154 176" aria-hidden="true" className="h-7 w-auto text-foreground">
-              <path
-                fill="currentColor"
-                fillRule="evenodd"
-                d="M66 40H122A88 88 0 0 1 122 216H66A20 20 0 0 1 46 196V60A20 20 0 0 1 66 40ZM108.64 99.06A21 21 0 1 0 83 101.89L83 154.11A21 21 0 1 0 105 154.11L105 128A55 55 0 0 0 138 139H154V117H138A33 33 0 0 1 108.64 99.06Z"
-              />
-              <circle cx="154" cy="128" r="24" fill="#FF5A36" />
-            </svg>
-            {/* Name hides on phones so the header fits 375px; screen readers still get it */}
-            <span className="sr-only sm:not-sr-only">GitDoc Agent</span>
-          </div>
+          <Logo />
           <div className="flex items-center gap-1 sm:gap-2">
             <TabsList>
               <TabsTrigger value="generate" className="sm:px-3">Generate</TabsTrigger>
@@ -440,7 +429,8 @@ function Ask({ repo, setRepo }: RepoProps) {
   )
 
   return (
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col sm:min-h-[calc(100dvh-8.5rem)]">
+    // Fills the viewport below the header (height + 1px border) and main's padding, without overflowing
+    <div className="flex min-h-[calc(100dvh-7rem-1px)] flex-col sm:min-h-[calc(100dvh-8.5rem-1px)]">
       <div className="flex items-center gap-2">
         <div className="max-w-sm flex-1">
           <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
@@ -560,7 +550,9 @@ function RepoInput({
   )
 }
 
-function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string; onRefresh: () => void }) {
+function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string; onRefresh: () => Promise<void> }) {
+  const [refreshing, setRefreshing] = useState(false)
+
   return (
     <>
       <div className="flex items-end justify-between gap-4">
@@ -568,8 +560,9 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
           <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
           <p className="text-sm text-muted-foreground">The 20 most recent workflow executions.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onRefresh} aria-label="Refresh" className="shrink-0">
-          <RefreshCw />
+        <Button variant="outline" size="sm" onClick={async () => { setRefreshing(true); await onRefresh(); setRefreshing(false) }}
+          disabled={refreshing} aria-label="Refresh" className="shrink-0">
+          <RefreshCw className={cn(refreshing && 'motion-safe:animate-spin')} />
           <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
