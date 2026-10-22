@@ -406,7 +406,7 @@ function Ask({ repo, setRepo }: RepoProps) {
         e.preventDefault()
         send(question)
       }}
-      className="flex items-end gap-2 rounded-2xl border bg-card p-2 pl-4 shadow-sm transition-colors focus-within:border-ring"
+      className="flex items-end gap-2 rounded-2xl border bg-card p-2 pl-4 shadow-xs transition-colors focus-within:border-ring"
     >
       {/* field-sizing grows the textarea with its content, up to max-h */}
       <textarea
