@@ -26,3 +26,4 @@ dist-ssr
 # Secrets (n8n API key, webhook token)
 .env
 pinecone credentials.txt
+.claude/

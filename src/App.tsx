@@ -1,4 +1,4 @@
-import { Check, CircleX, Download, FileText, Loader2, Moon, Plus, RefreshCw, Send, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,9 +51,6 @@ const FAILED = new Set(['error', 'crashed', 'canceled'])
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`)
-
-const PROSE =
-  'prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground'
 
 // Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
 async function renderMarkdown(md: string) {
@@ -344,6 +341,10 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
 
 type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; sources: string[] }
 
+// Chat answers read at body size, with inline code shown without backticks
+const CHAT_PROSE =
+  'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none'
+
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
 function Ask({ repo, setRepo }: RepoProps) {
@@ -385,110 +386,133 @@ function Ask({ repo, setRepo }: RepoProps) {
     setSessionId(crypto.randomUUID())
   }
 
+  const empty = messages.length === 0
+
+  const composer = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        send(question)
+      }}
+      className="flex items-end gap-2 rounded-3xl border bg-card p-2 pl-4 shadow-sm transition-colors focus-within:border-ring"
+    >
+      {/* field-sizing grows the textarea with its content, up to max-h */}
+      <textarea
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault()
+            send(question)
+          }
+        }}
+        placeholder={noRepo ? 'Enter a repository URL above first' : 'Ask anything about the code'}
+        aria-label="Question"
+        rows={1}
+        maxLength={MAX_QUESTION}
+        disabled={pending}
+        className="max-h-48 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-base outline-none [field-sizing:content] placeholder:text-muted-foreground disabled:opacity-50"
+      />
+      <Button
+        type="submit"
+        size="icon"
+        className="rounded-full"
+        disabled={pending || noRepo || !question.trim()}
+        aria-label="Send"
+      >
+        <ArrowUp />
+      </Button>
+    </form>
+  )
+
   return (
-    <>
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Ask the Repo</h1>
-        <p className="text-sm text-muted-foreground">Answers come from the indexed source of the repository.</p>
+    <div className="flex min-h-[calc(100dvh-9rem)] flex-col">
+      <div className="flex items-center gap-2">
+        <div className="max-w-sm flex-1">
+          <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
+        </div>
+        {/* Disabled while waiting, so a late answer never lands in the new chat */}
+        <Button variant="ghost" size="sm" onClick={newChat} disabled={pending || messages.length === 0} className="ml-auto">
+          <SquarePen />
+          New chat
+        </Button>
       </div>
 
-      <Card>
-        <CardContent className="space-y-3">
-          <label htmlFor="ask-repo" className="text-sm font-medium">
-            Repository URL
-          </label>
-          <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
-          {noRepo && (
-            <p className="text-sm text-muted-foreground">
-              Enter a repository URL first. Generate docs for it once so it gets indexed.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {empty ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-16">
+          <h1 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl">What do you want to know?</h1>
+          <div className="w-full">{composer}</div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {SUGGESTIONS.map((s) => (
+              <Button
+                key={s}
+                variant="outline"
+                size="sm"
+                className="rounded-full font-normal text-muted-foreground"
+                disabled={noRepo}
+                onClick={() => send(s)}
+              >
+                {s}
+              </Button>
+            ))}
+          </div>
+          <p className="text-center text-sm text-muted-foreground">
+            {noRepo ? 'Generate docs for a repository once so it gets indexed, then ask here.' : 'Answers come from the indexed source of the repository.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          <ol className="flex-1 space-y-8 py-8" aria-live="polite">
+            {messages.map((m, i) => (
+              <li key={i} data-role={m.role}>
+                {m.role === 'user' ? (
+                  <p className="ml-auto w-fit max-w-[85%] rounded-3xl bg-muted px-4 py-2.5 whitespace-pre-wrap">{m.text}</p>
+                ) : (
+                  <div className="space-y-3">
+                    <article className={CHAT_PROSE} dangerouslySetInnerHTML={{ __html: m.html }} />
+                    {m.sources.length > 0 && (
+                      <details className="group">
+                        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-2 py-1 -ml-2 text-xs text-muted-foreground transition-colors select-none hover:bg-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
+                          {m.sources.length} {m.sources.length === 1 ? 'source' : 'sources'}
+                          <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+                        </summary>
+                        <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Sources">
+                          {m.sources.map((src, j) => (
+                            <li
+                              key={j}
+                              className="flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground"
+                            >
+                              <FileCode className="size-3.5 shrink-0" />
+                              <code className="truncate font-mono">{src}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+            {pending && (
+              <li className="animate-pulse text-sm text-muted-foreground" role="status">
+                Searching the code…
+              </li>
+            )}
+            {error && (
+              <li className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+                {error}
+              </li>
+            )}
+          </ol>
+          {/* scroll-margin keeps the newest message clear of the sticky composer */}
+          <div ref={end} className="scroll-mb-40" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Chat</CardTitle>
-          <CardAction>
-            {/* Disabled while waiting, so a late answer never lands in the new chat */}
-            <Button variant="outline" size="sm" onClick={newChat} disabled={pending || messages.length === 0}>
-              <Plus />
-              New chat
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {messages.length === 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
-                <Button key={s} variant="secondary" size="sm" disabled={noRepo || pending} onClick={() => send(s)}>
-                  {s}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <ol className="space-y-4" aria-live="polite">
-              {messages.map((m, i) => (
-                <li key={i} data-role={m.role} className="space-y-2">
-                  {m.role === 'user' && <p className="text-sm font-medium whitespace-pre-wrap">{m.text}</p>}
-                  {m.role === 'assistant' && (
-                    <>
-                      <article className={PROSE} dangerouslySetInnerHTML={{ __html: m.html }} />
-                      {m.sources.length > 0 && (
-                        <div className="text-sm">
-                          <p className="font-medium text-muted-foreground">Sources</p>
-                          <ul>
-                            {m.sources.map((src, j) => (
-                              <li key={j}>
-                                <code className="font-mono text-xs">{src}</code>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-
-          {pending && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-              <Loader2 className="size-4 animate-spin" />
-              Searching the code…
-            </p>
-          )}
-          {error && (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-          <div ref={end} />
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              send(question)
-            }}
-            className="flex gap-2"
-          >
-            <Input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question about the code"
-              aria-label="Question"
-              maxLength={MAX_QUESTION}
-              disabled={pending}
-            />
-            <Button type="submit" disabled={pending || noRepo || !question.trim()}>
-              <Send />
-              Ask
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </>
+          <div className="sticky bottom-0 bg-background pb-4">
+            {composer}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
