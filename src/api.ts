@@ -124,7 +124,8 @@ export function timeline(runData: Record<string, TaskData[]>, running: string | 
 export const showProgressHint = (elapsed: number, nodes: NodeRun[]) =>
   elapsed >= 10 && !nodes.some((n) => n.status !== 'running')
 
-export type Progress = { id: string; nodes: NodeRun[] }
+/** `error` is the first failed node as "Node: message", empty when none failed. */
+export type Progress = { id: string; status: string; error: string; nodes: NodeRun[] }
 
 /** Latest execution that matches `query`, as a node timeline. Default: the running one.
  *  n8n only fills runData during a run when the workflow's "Save execution progress" setting is on. */
@@ -137,5 +138,7 @@ export async function getProgress(query = 'status=running'): Promise<Progress | 
     ? Object.fromEntries(Object.entries(raw).filter(([, t]) => Array.isArray(t) && t.length > 0 && isObject(t[0])))
     : {}
   const head = run.status === 'running' ? run.data?.executionData?.nodeExecutionStack?.[0]?.node?.name : undefined
-  return { id: run.id, nodes: timeline(runData, typeof head === 'string' ? head : null) }
+  const failed = Object.entries(runData).find(([, tasks]) => tasks.some((t) => t.error))
+  const error = failed ? `${failed[0]}: ${failed[1].find((t) => t.error)?.error?.message ?? 'failed'}` : ''
+  return { id: run.id, status: str(run.status), error, nodes: timeline(runData, typeof head === 'string' ? head : null) }
 }

@@ -24,7 +24,8 @@ import {
   type Run,
 } from './api'
 
-type Phase = 'idle' | 'running' | 'done' | 'error'
+// partial: docs came back, but the execution failed later (Ask indexing)
+type Phase = 'idle' | 'running' | 'done' | 'partial' | 'error'
 type Tone = 'success' | 'destructive' | 'warning' | 'neutral'
 
 const TONE: Record<Tone, string> = {
@@ -43,7 +44,10 @@ const STATUS_TONE: Record<string, Tone> = {
   running: 'warning',
   waiting: 'warning',
   new: 'warning',
+  partial: 'warning',
 }
+
+const FAILED = new Set(['error', 'crashed', 'canceled'])
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`)
@@ -181,19 +185,31 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     setRunId('')
     setElapsed(0)
     setError('')
+    setResult(null)
     try {
       const res = await callWorkflow(url)
       setHtml(await renderMarkdown(res.preview))
       setResult(res)
-      setPhase('done')
-      onFinished()
     } catch (e) {
       setError((e as Error).message)
       setPhase('error')
+      // The run may end between polls: fetch the latest execution once more so the list ends on the final node.
+      getProgress('').then(applyProgress).catch(() => {})
+      return
     }
-    // The run may end between polls: fetch the latest execution once more so the list ends on the final node.
+    // "Return Documentation" answers before the Ask indexing branch runs, so wait for the execution to end.
     // ponytail: assumes the latest execution is ours (single local user); match on runId if several people share n8n
-    getProgress('').then(applyProgress).catch(() => {})
+    let p = await getProgress('').catch(() => null)
+    for (let i = 0; p?.status === 'running' && i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 3000))
+      p = await getProgress('').catch(() => null)
+    }
+    applyProgress(p)
+    if (p && FAILED.has(p.status)) {
+      setError(p.error || `n8n marked execution #${p.id} as ${p.status}.`)
+      setPhase('partial')
+    } else setPhase('done')
+    onFinished()
   }
 
   function download() {
@@ -206,11 +222,12 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     URL.revokeObjectURL(a.href)
   }
 
-  const status = { idle: 'idle', running: 'running', done: 'success', error: 'failed' }[phase]
+  const status = { idle: 'idle', running: 'running', done: 'success', partial: 'partial', error: 'failed' }[phase]
 
   // Steps finished so far; all of them once done
-  const completed = phase === 'done' ? STEPS.length : (step ?? 0)
-  const stepText = phase === 'done' ? 'Complete' : `Step ${completed + 1} of ${STEPS.length}: ${STEPS[completed][0]}`
+  const finished = phase === 'done' || phase === 'partial'
+  const completed = finished ? STEPS.length : (step ?? 0)
+  const stepText = finished ? 'Complete' : `Step ${completed + 1} of ${STEPS.length}: ${STEPS[completed][0]}`
 
   return (
     <>
@@ -239,13 +256,17 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
               </Button>
             </div>
             <p
-              className={cn('text-sm', phase === 'error' ? 'text-destructive' : 'text-muted-foreground')}
-              role={phase === 'error' ? 'alert' : undefined}
+              className={cn(
+                'text-sm',
+                phase === 'error' ? 'text-destructive' : phase === 'partial' ? 'text-warning' : 'text-muted-foreground',
+              )}
+              role={phase === 'error' || phase === 'partial' ? 'alert' : undefined}
               aria-live="polite"
             >
               {phase === 'idle' && 'Paste a public GitHub URL and press Enter.'}
               {phase === 'running' && 'This usually takes a few minutes. Keep this tab open.'}
               {phase === 'done' && `Documentation generated in ${clock(elapsed)}.`}
+              {phase === 'partial' && `Documentation generated in ${clock(elapsed)}, but the run failed after that, so Ask may not know this repo. ${error}`}
               {phase === 'error' && error}
             </p>
           </form>
@@ -297,7 +318,7 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
         </Card>
       )}
 
-      {phase === 'done' && result && (
+      {result && phase !== 'error' && (
         <Card>
           <CardHeader className="border-b">
             <CardTitle>Documentation</CardTitle>

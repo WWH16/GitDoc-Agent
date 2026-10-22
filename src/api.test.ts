@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, callWorkflow, currentStep, getHistory, showProgressHint, timeline } from './api.ts'
+import { askRepo, callWorkflow, currentStep, getHistory, getProgress, showProgressHint, timeline } from './api.ts'
 
 const reply = (status: number, body: unknown) => {
   globalThis.fetch = async () => new Response(JSON.stringify(body), { status })
@@ -88,4 +88,20 @@ test('network failure on ask gives a fixed message', async () => {
 test('200 with an error body is treated as an error', async () => {
   reply(200, { error: 'blocked' })
   await assert.rejects(askRepo('r', 'q', 's'), /^Error: blocked$/)
+})
+
+test('getProgress reports final status and the first failed node', async () => {
+  reply(200, {
+    data: [{
+      id: 448,
+      status: 'error',
+      data: { resultData: { runData: {
+        'Return Documentation': [{ startTime: 1, executionTime: 1 }],
+        'Supabase Vector Store': [{ startTime: 2, executionTime: 1, error: { message: 'fetch failed' } }],
+      } } },
+    }],
+  })
+  const p = await getProgress('')
+  assert.equal(p?.status, 'error')
+  assert.equal(p?.error, 'Supabase Vector Store: fetch failed')
 })
