@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
@@ -63,10 +64,37 @@ async function renderMarkdown(md: string) {
   return DOMPurify.sanitize(marked.parse(md, { async: false }))
 }
 
+// localStorage helpers: the repo, last docs and Ask chat survive leaving the app (e.g. for the landing page) or a reload.
+// Failures are ignored: private mode, blocked storage, or very large docs over the ~5 MB quota just aren't saved.
+function load<T>(key: string): T | null {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? 'null') as T | null
+  } catch {
+    return null
+  }
+}
+
+function save(key: string, value: unknown) {
+  try {
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(value))
+  } catch {}
+}
+
+function useSavedState<T>(key: string, initial: () => T) {
+  const [value, setValue] = useState<T>(() => load<T>(key) ?? initial())
+  useEffect(() => save(key, value), [key, value])
+  return [value, setValue] as const
+}
+
 type RepoProps = { repo: string; setRepo: (v: string) => void }
 
+// The landing page's form links here as /app/?repo=<url>; that beats the saved repo
+const LANDING_REPO = new URLSearchParams(location.search).get('repo')
+if (LANDING_REPO) save('gitdoc:repo', LANDING_REPO)
+
 export default function App() {
-  const [repo, setRepo] = useState('')
+  const [repo, setRepo] = useSavedState('gitdoc:repo', () => '')
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [historyError, setHistoryError] = useState('')
 
@@ -87,7 +115,9 @@ export default function App() {
     <Tabs defaultValue="generate" className="min-h-screen gap-0">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4">
-          <Logo />
+          <a href="/" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+            <Logo />
+          </a>
           <div className="flex items-center gap-1 sm:gap-2">
             <TabsList>
               <TabsTrigger value="generate" className="sm:px-3">Generate</TabsTrigger>
@@ -146,15 +176,26 @@ function ThemeToggle() {
   )
 }
 
+// The last finished run, restored when you come back to the app
+type SavedRun = { phase: Phase; nodes: NodeRun[]; runId: string; elapsed: number; result: Result; html: string; error: string }
+const SAVED_RUN = 'gitdoc:last-run'
+
 function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () => void }) {
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [saved] = useState(() => load<SavedRun>(SAVED_RUN))
+  const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'idle')
   const [step, setStep] = useState<number | null>(null)
-  const [nodes, setNodes] = useState<NodeRun[]>([])
-  const [runId, setRunId] = useState('')
-  const [elapsed, setElapsed] = useState(0)
-  const [result, setResult] = useState<Result | null>(null)
-  const [html, setHtml] = useState('')
-  const [error, setError] = useState('')
+  const [nodes, setNodes] = useState<NodeRun[]>(saved?.nodes ?? [])
+  const [runId, setRunId] = useState(saved?.runId ?? '')
+  const [elapsed, setElapsed] = useState(saved?.elapsed ?? 0)
+  const [result, setResult] = useState<Result | null>(saved?.result ?? null)
+  const [html, setHtml] = useState(saved?.html ?? '')
+  const [error, setError] = useState(saved?.error ?? '')
+
+  // Save each finished run; a new run clears the old one so its docs never come back as the new repo's
+  useEffect(() => {
+    if (phase === 'running') save(SAVED_RUN, null)
+    if ((phase === 'done' || phase === 'partial') && result) save(SAVED_RUN, { phase, nodes, runId, elapsed, result, html, error })
+  }, [phase, nodes, runId, elapsed, result, html, error])
 
   function applyProgress(p: RunProgress | null) {
     if (!p) return
@@ -162,6 +203,14 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     setNodes(p.nodes)
     setStep(currentStep(new Set(p.nodes.filter((n) => n.status !== 'running').map((n) => n.name))))
   }
+
+  // A run in progress can't be restored, so the browser asks before leaving, reloading or closing the tab
+  useEffect(() => {
+    if (phase !== 'running') return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    addEventListener('beforeunload', warn)
+    return () => removeEventListener('beforeunload', warn)
+  }, [phase])
 
   // Tick every second while generating; poll n8n every 3 seconds (best-effort, errors ignored)
   useEffect(() => {
@@ -351,9 +400,9 @@ type Message = { role: 'user'; text: string } | { role: 'assistant'; html: strin
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
 function Ask({ repo, setRepo }: RepoProps) {
-  // One sessionId per chat, so the backend keeps the conversation's context
-  const [sessionId, setSessionId] = useState(() => crypto.randomUUID())
-  const [messages, setMessages] = useState<Message[]>([])
+  // One sessionId per chat, so the backend keeps the conversation's context; both are saved so the chat continues
+  const [sessionId, setSessionId] = useSavedState('gitdoc:ask-session', () => crypto.randomUUID())
+  const [messages, setMessages] = useSavedState<Message[]>('gitdoc:ask-messages', () => [])
   const [question, setQuestion] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -605,14 +654,5 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
         )}
       </Card>
     </>
-  )
-}
-
-// lucide-react no longer ships brand icons
-function GitHubIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} fill="currentColor" aria-hidden>
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
-    </svg>
   )
 }

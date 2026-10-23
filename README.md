@@ -21,7 +21,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. n8n must be running on port 5678.
+Open http://localhost:5173/app/. n8n must be running on port 5678.
+
+The landing page is at http://localhost:5173/. Its form opens the app with `?repo=<url>` filled in.
 
 The Vite dev proxy adds the keys to each request, so the browser never sees them. This only works with `npm run dev`. A `npm run build` output has no proxy.
 

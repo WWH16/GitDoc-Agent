@@ -1,12 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scroll-smooth motion-reduce:scroll-auto">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>GitDoc Agent</title>
+    <title>GitDoc Agent: documentation for GitHub repositories</title>
+    <meta
+      name="description"
+      content="Paste a GitHub repository URL. An AI agent in an n8n workflow writes its documentation with diagrams and answers questions about the code, with sources."
+    />
+    <meta property="og:title" content="GitDoc Agent" />
+    <meta property="og:description" content="Paste a repo. Get its docs, then ask about the code." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600&display=swap" />
     <script>
-      // Apply the saved theme before first paint so the page never flashes the wrong one
+      // Same saved theme as the app, applied before first paint
       try {
         const t = localStorage.getItem('theme') || 'system'
         const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
@@ -16,6 +25,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/landing.tsx"></script>
   </body>
 </html>

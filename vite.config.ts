@@ -23,6 +23,15 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    // Two pages: the landing page at / and the app at /app/
+    build: {
+      rolldownOptions: {
+        input: {
+          landing: fileURLToPath(new URL('./index.html', import.meta.url)),
+          app: fileURLToPath(new URL('./app/index.html', import.meta.url)),
+        },
+      },
+    },
     server: {
       proxy: {
         '/api/generate': hook(webhookPath, 300_000),

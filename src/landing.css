@@ -1,0 +1,6 @@
+@import "./index.css";
+
+/* Outfit (loaded in index.html) is geometric like the custom wordmark; headings only, body stays system UI */
+@theme {
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+}
