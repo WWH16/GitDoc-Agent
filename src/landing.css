@@ -3,4 +3,6 @@
 /* Outfit (loaded in index.html) is geometric like the custom wordmark; headings only, body stays system UI */
 @theme {
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  /* The page's one ease-out curve: a quick start that settles in (ease-out-quart utility) */
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
 }
