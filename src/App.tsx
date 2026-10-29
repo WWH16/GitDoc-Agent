@@ -1,5 +1,5 @@
 import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -58,7 +58,7 @@ const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixe
 
 // Rendered markdown (docs preview and chat answers) reads at body size; inline code drops the backticks
 const PROSE =
-  'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none prose-table:block prose-table:overflow-x-auto'
+  'prose prose-base prose-neutral max-w-none break-words dark:prose-invert prose-headings:tracking-tight prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none prose-table:block prose-table:overflow-x-auto'
 
 // The page column (46rem) inside the wide documentation card: text starts on the same left edge as the form and run
 // card above and stops at a 70ch measure; diagrams, code and tables break out to the card's full width.
@@ -438,42 +438,82 @@ const toTurn = (m: Message): Turn =>
 
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
+// A question that got no answer: kept so it can be asked again without retyping
+type Failure = { question: string; message: string; cancelled: boolean }
+
+// Answers can take minutes on the free tier; the wait message changes so a long wait never looks stuck
+const waitMessage = (s: number) =>
+  s < 30
+    ? 'Searching the code…'
+    : s < 150
+      ? 'Still working. Answers can take a couple of minutes on the free tier.'
+      : 'This is taking longer than usual. Keep waiting, or stop and try again.'
+
 function Ask({ repo, setRepo }: RepoProps) {
   // One sessionId per chat, so the backend keeps the conversation's context; both are saved so the chat continues
   const [sessionId, setSessionId] = useSavedState('gitdoc:ask-session', () => crypto.randomUUID())
   const [messages, setMessages] = useSavedState<Message[]>('gitdoc:ask-messages', () => [])
   const [question, setQuestion] = useState('')
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState('')
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  const [failed, setFailed] = useState<Failure | null>(null)
+  const abort = useRef<AbortController | null>(null)
+  const input = useRef<HTMLTextAreaElement>(null)
+  const refocus = useRef(false)
   const end = useRef<HTMLDivElement>(null)
+  const pending = startedAt !== null
   const noRepo = !repo.trim()
+  const waited = pending ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
 
-  // Keep the newest message (or the waiting indicator) in view
+  // Tick once a second while waiting, for the elapsed time and wait message
+  useEffect(() => {
+    if (!pending) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [pending])
+
+  // Keep the newest message (or the waiting indicator) in view. Sending can unmount what had focus (a starter question,
+  // or the first composer), so focus goes back to the question box.
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'nearest' })
-  }, [messages, pending])
+    if (refocus.current) {
+      refocus.current = false
+      input.current?.focus({ preventScroll: true })
+    }
+  }, [messages, startedAt])
 
-  async function send(text: string) {
+  async function send(text: string, retry = false) {
     const q = text.trim()
     if (!q || noRepo || pending) return
-    setMessages((m) => [...m, { role: 'user', text: q }])
-    setQuestion('')
-    setError('')
-    setPending(true)
+    // A retry asks the question that already ends the chat: it is not added again, nor sent as history
+    const prior = retry ? messages.slice(0, -1) : messages
+    if (!retry) {
+      setMessages((m) => [...m, { role: 'user', text: q }])
+      setQuestion('')
+    }
+    setFailed(null)
+    setNow(Date.now())
+    setStartedAt(Date.now())
+    // On phones only keep focus where the person was typing, so the keyboard doesn't pop up after a tap
+    refocus.current = document.activeElement === input.current || matchMedia('(pointer: fine)').matches
+    const ctrl = new AbortController()
+    abort.current = ctrl
     try {
-      const { answer, sources } = await askRepo(repo.trim(), q, sessionId, messages.map(toTurn))
+      const { answer, sources } = await askRepo(repo.trim(), q, sessionId, prior.map(toTurn), ctrl.signal)
       const html = await renderMarkdown(answer)
       setMessages((m) => [...m, { role: 'assistant', html, text: answer, sources }])
     } catch (e) {
-      setError((e as Error).message)
+      const cancelled = ctrl.signal.aborted
+      setFailed({ question: q, message: cancelled ? 'You stopped waiting for this answer.' : (e as Error).message, cancelled })
     } finally {
-      setPending(false)
+      abort.current = null
+      setStartedAt(null)
     }
   }
 
   function newChat() {
     setMessages([])
-    setError('')
+    setFailed(null)
     setSessionId(crypto.randomUUID())
   }
 
@@ -487,8 +527,10 @@ function Ask({ repo, setRepo }: RepoProps) {
       }}
       className="flex items-end gap-2 rounded-2xl border bg-card p-2 pl-4 shadow-xs transition-colors focus-within:border-ring"
     >
-      {/* field-sizing grows the textarea with its content, up to max-h */}
+      {/* field-sizing grows the textarea with its content, up to max-h. It stays enabled while waiting, so focus
+          never drops and the next question can be drafted; only sending waits for the answer. */}
       <textarea
+        ref={input}
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => {
@@ -501,8 +543,7 @@ function Ask({ repo, setRepo }: RepoProps) {
         aria-label="Question"
         rows={1}
         maxLength={MAX_QUESTION}
-        disabled={pending}
-        className="max-h-48 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-base outline-none [field-sizing:content] placeholder:text-muted-foreground disabled:opacity-50"
+        className="max-h-48 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-base outline-none [field-sizing:content] placeholder:text-muted-foreground"
       />
       <Button
         type="submit"
@@ -521,6 +562,9 @@ function Ask({ repo, setRepo }: RepoProps) {
     <div className="flex min-h-[calc(100dvh-7rem-1px)] flex-col sm:min-h-[calc(100dvh-8.5rem-1px)]">
       <div className="flex items-center gap-2">
         <div className="max-w-sm flex-1">
+          <label htmlFor="ask-repo" className="sr-only">
+            Repository URL
+          </label>
           <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
         </div>
         {/* Disabled while waiting, so a late answer never lands in the new chat */}
@@ -555,48 +599,39 @@ function Ask({ repo, setRepo }: RepoProps) {
       ) : (
         <>
           <h1 className="sr-only">Ask the repo</h1>
-          <ol className="flex-1 space-y-8 py-8" aria-live="polite">
-            {messages.map((m, i) => (
-              <li key={i} data-role={m.role}>
-                {m.role === 'user' ? (
-                  <p className="ml-auto w-fit max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 whitespace-pre-wrap">{m.text}</p>
-                ) : (
-                  <div className="space-y-3">
-                    <article className={PROSE} dangerouslySetInnerHTML={{ __html: m.html }} />
-                    {m.sources.length > 0 && (
-                      <details className="group">
-                        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full px-2 py-1 -ml-2 text-xs text-muted-foreground transition-colors select-none hover:bg-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
-                          {m.sources.length} {m.sources.length === 1 ? 'source' : 'sources'}
-                          <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
-                        </summary>
-                        <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Sources">
-                          {m.sources.map((src, j) => (
-                            <li
-                              key={j}
-                              className="flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground"
-                            >
-                              <FileCode className="size-3.5 shrink-0" />
-                              <code className="truncate font-mono">{src}</code>
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
+          <div className="flex-1 space-y-8 py-8">
+            <MessageList messages={messages} />
+
+            {/* Outside the message list's live region, so the ticking timer is never read out; the message is */}
             {pending && (
-              <li className="text-sm motion-safe:animate-pulse text-muted-foreground" role="status">
-                Searching the code…
-              </li>
+              <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <Loader2 className="size-4 shrink-0 motion-safe:animate-spin" />
+                <span className="flex-1">{waitMessage(waited)}</span>
+                <span className="tabular-nums" aria-hidden>
+                  {clock(waited)}
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => abort.current?.abort()}>
+                  Stop waiting
+                </Button>
+              </div>
             )}
-            {error && (
-              <li className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
-                {error}
-              </li>
+
+            {failed && (
+              <div
+                role={failed.cancelled ? 'status' : 'alert'}
+                className={cn(
+                  'flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3 text-sm',
+                  failed.cancelled ? 'text-muted-foreground' : 'border-destructive/30 bg-destructive/10 text-destructive',
+                )}
+              >
+                <p className="min-w-0 flex-1 break-words">{failed.message}</p>
+                <Button variant="outline" size="sm" onClick={() => send(failed.question, true)} disabled={noRepo}>
+                  <RefreshCw />
+                  Try again
+                </Button>
+              </div>
             )}
-          </ol>
+          </div>
           {/* scroll-margin keeps the newest message clear of the sticky composer */}
           <div ref={end} className="scroll-mb-40" />
 
@@ -608,6 +643,49 @@ function Ask({ repo, setRepo }: RepoProps) {
     </div>
   )
 }
+
+// Memoized: typing a question re-renders Ask, but the chat itself only changes when a message is added
+const MessageList = memo(function MessageList({ messages }: { messages: Message[] }) {
+  return (
+    <ol className="space-y-8" aria-live="polite">
+      {messages.map((m, i) => (
+        <li key={i} data-role={m.role}>
+          {m.role === 'user' ? (
+            <p className="ml-auto w-fit max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 break-words whitespace-pre-wrap">
+              <span className="sr-only">You: </span>
+              {m.text}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <p className="sr-only">Answer:</p>
+              <ZoomableArticle html={m.html} className={PROSE} />
+              {m.sources.length > 0 && (
+                <details className="group">
+                  {/* 44px tall on phones, compact from sm, like the buttons */}
+                  <summary className="-ml-2 inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-3 py-1 text-xs text-muted-foreground transition-colors select-none hover:bg-muted hover:text-foreground sm:min-h-0 sm:px-2 [&::-webkit-details-marker]:hidden">
+                    {m.sources.length} {m.sources.length === 1 ? 'source' : 'sources'}
+                    <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Sources">
+                    {m.sources.map((src, j) => (
+                      <li
+                        key={j}
+                        className="flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground"
+                      >
+                        <FileCode className="size-3.5 shrink-0" />
+                        <code className="truncate font-mono">{src}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ol>
+  )
+})
 
 function RepoInput({
   id,

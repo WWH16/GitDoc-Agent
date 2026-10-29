@@ -114,3 +114,12 @@ test('recentTurns keeps the last 6 turns and trims each to 600 chars', () => {
   assert.ok(out.every((t) => t.text.length === 600))
 })
 
+test('a cancelled ask rejects with AbortError, not the "No response" message', async () => {
+  globalThis.fetch = async (_url, init) => {
+    if (init?.signal?.aborted) throw new DOMException('aborted', 'AbortError')
+    return new Response('{}')
+  }
+  const c = new AbortController()
+  c.abort()
+  await assert.rejects(askRepo('r', 'q', 's', [], c.signal), { name: 'AbortError' })
+})

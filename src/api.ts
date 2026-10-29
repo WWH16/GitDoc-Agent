@@ -37,15 +37,18 @@ export const currentStep = (doneNodes: Set<string>) =>
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
 /** POST JSON through the dev proxy. A non-2xx response throws body.error or body.message if present, otherwise "HTTP <status>". */
-async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
+async function post(path: string, body: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
   let r: Response
   try {
     r = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     })
-  } catch {
+  } catch (e) {
+    // A cancel by the caller stays an AbortError so it can be told apart from a failure
+    if (signal?.aborted) throw e
     // Also hit when the dev proxy gives up on a slow run (vite.config.ts timeouts)
     throw new Error('No response from n8n. It may be stopped, or the run took too long.')
   }
@@ -79,8 +82,15 @@ export const MAX_TURN_CHARS = 600
 export const recentTurns = (turns: Turn[]): Turn[] =>
   turns.slice(-MAX_TURNS).map((t) => ({ role: t.role, text: t.text.slice(0, MAX_TURN_CHARS) }))
 
-export async function askRepo(repo: string, question: string, sessionId: string, history: Turn[] = []): Promise<Answer> {
-  const data = await post('/api/ask', { repo, question, sessionId, history: recentTurns(history) })
+/** `signal` cancels the wait in the browser; the n8n run itself keeps going. */
+export async function askRepo(
+  repo: string,
+  question: string,
+  sessionId: string,
+  history: Turn[] = [],
+  signal?: AbortSignal,
+): Promise<Answer> {
+  const data = await post('/api/ask', { repo, question, sessionId, history: recentTurns(history) }, signal)
   if (typeof data.answer !== 'string') throw new Error('The assistant returned no answer.')
   const sources = Array.isArray(data.sources) ? data.sources.filter((s): s is string => typeof s === 'string') : []
   return { answer: data.answer, sources }
