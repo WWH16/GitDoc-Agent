@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
+import { ZoomableArticle } from '@/components/zoomable-article'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -58,6 +59,12 @@ const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixe
 // Rendered markdown (docs preview and chat answers) reads at body size; inline code drops the backticks
 const PROSE =
   'prose prose-base prose-neutral max-w-none dark:prose-invert prose-headings:tracking-tight prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none prose-table:block prose-table:overflow-x-auto'
+
+// The page column (46rem) inside the wide documentation card: text starts on the same left edge as the form and run
+// card above and stops at a 70ch measure; diagrams, code and tables break out to the card's full width.
+// (Class names are written out in full: Tailwind only finds literal strings.)
+const WIDE_PROSE =
+  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>pre]:ml-0 [&>pre]:max-w-none [&>table]:ml-0 [&>table]:max-w-none'
 
 // Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
 async function renderMarkdown(md: string) {
@@ -376,10 +383,12 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
       )}
 
       {result && phase !== 'error' && (
-        <Card>
-          <CardHeader className="border-b">
+        // Breaks out of the 48rem column so diagrams get room; text keeps a readable line length below
+        <Card className="ml-[calc(50%-min(38rem,50vw-1rem))] w-[min(76rem,calc(100vw-2rem))]">
+          {/* Side padding puts the title and Download button on the page column's edges, like the cards above */}
+          <CardHeader className="border-b sm:px-[max(1.5rem,calc((100%-46rem)/2))]">
             <CardTitle>Documentation</CardTitle>
-            <CardDescription>Preview of the generated DOCUMENTATION.md</CardDescription>
+            <CardDescription>Preview of the generated DOCUMENTATION.md. Select a diagram to enlarge it.</CardDescription>
             <CardAction>
               <Button variant="outline" size="sm" onClick={download}>
                 <Download />
@@ -388,7 +397,7 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
             </CardAction>
           </CardHeader>
           <CardContent>
-            <article className={PROSE} dangerouslySetInnerHTML={{ __html: html }} />
+            <ZoomableArticle html={html} className={cn(PROSE, WIDE_PROSE)} />
           </CardContent>
         </Card>
       )}
