@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -63,8 +63,9 @@ const PROSE =
 // The page column (46rem) inside the wide documentation card: text starts on the same left edge as the form and run
 // card above and stops at a 70ch measure; diagrams, code and tables break out to the card's full width.
 // (Class names are written out in full: Tailwind only finds literal strings.)
+// From 1280px the docs sit in their own pane, so text starts at the pane's edge instead.
 const WIDE_PROSE =
-  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>pre]:ml-0 [&>pre]:max-w-none [&>table]:ml-0 [&>table]:max-w-none'
+  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] xl:[&>*]:ml-0 [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>pre]:ml-0 [&>pre]:max-w-none [&>table]:ml-0 [&>table]:max-w-none'
 
 // Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
 async function renderMarkdown(md: string) {
@@ -122,7 +123,7 @@ export default function App() {
   return (
     <Tabs defaultValue="generate" className="min-h-screen gap-0">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4">
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4 xl:max-w-[88rem]">
           <a href="/" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             <Logo />
           </a>
@@ -137,15 +138,16 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-6 sm:py-10">
+      {/* Up to 1280px every tab is one 48rem column; on big screens the shell widens and each tab picks its own width */}
+      <main className="mx-auto w-full max-w-3xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-6 sm:py-10 xl:max-w-[88rem]">
         {/* forceMount keeps every tab mounted: results, chat and a running generation survive tab switches */}
-        <TabsContent value="generate" forceMount className="space-y-6 data-[state=inactive]:hidden sm:space-y-8">
+        <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
           <Generate repo={repo} setRepo={setRepo} onFinished={refresh} />
         </TabsContent>
-        <TabsContent value="ask" forceMount className="space-y-6 data-[state=inactive]:hidden sm:space-y-8">
+        <TabsContent value="ask" forceMount className="mx-auto w-full max-w-3xl data-[state=inactive]:hidden 2xl:max-w-4xl">
           <Ask repo={repo} setRepo={setRepo} />
         </TabsContent>
-        <TabsContent value="history" forceMount className="space-y-6 data-[state=inactive]:hidden sm:space-y-8">
+        <TabsContent value="history" forceMount className="mx-auto w-full max-w-3xl space-y-6 data-[state=inactive]:hidden sm:space-y-8 xl:max-w-5xl">
           <History runs={runs} error={historyError} onRefresh={refresh} />
         </TabsContent>
       </main>
@@ -297,8 +299,18 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
   const completed = finished ? STEPS.length : (step ?? 0)
   const stepText = finished ? 'Complete' : `Step ${completed + 1} of ${STEPS.length}: ${STEPS[completed][0]}`
 
+  // From 1280px a run gets two panes: the form and progress in a sticky rail, the docs beside it
+  const showDocs = !!result && phase !== 'error'
+  const split = showDocs || phase === 'running'
+
   return (
-    <>
+    <div
+      className={cn(
+        'mx-auto w-full max-w-3xl space-y-6 sm:space-y-8',
+        split && 'xl:grid xl:max-w-none xl:grid-cols-[24rem_minmax(0,1fr)] xl:items-start xl:gap-10 xl:space-y-0',
+      )}
+    >
+    <div className={cn('space-y-6 sm:space-y-8', split && 'xl:sticky xl:top-[5.5rem]')}>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Generate documentation</h1>
         <p className="text-sm text-muted-foreground">Turn any GitHub repository into readable docs with diagrams.</p>
@@ -359,7 +371,8 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
               </p>
             )}
             {nodes.length > 0 && (
-              <ol className="divide-y rounded-xl border text-sm">
+              // In the sticky rail the node list scrolls on its own, so the rail never runs past the screen
+              <ol className={cn('divide-y rounded-xl border text-sm', split && 'xl:max-h-[calc(100dvh-32rem)] xl:min-h-32 xl:overflow-y-auto')}>
                 {nodes.map((n) => (
                   <li key={n.name} className="flex items-center gap-3 px-3 py-2">
                     {n.status === 'running' ? (
@@ -381,12 +394,14 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
           </CardContent>
         </Card>
       )}
+    </div>
 
-      {result && phase !== 'error' && (
-        // Breaks out of the 48rem column so diagrams get room; text keeps a readable line length below
-        <Card className="ml-[calc(50%-min(38rem,50vw-1rem))] w-[min(76rem,calc(100vw-2rem))]">
+      {showDocs ? (
+        // Below 1280px: breaks out of the 48rem column so diagrams get room. From 1280px: fills the pane beside the
+        // rail, with the header sticky under the app header so Download stays in reach on long docs.
+        <Card className="ml-[calc(50%-min(38rem,50vw-1rem))] w-[min(76rem,calc(100vw-2rem))] xl:ml-0 xl:w-auto">
           {/* Side padding puts the title and Download button on the page column's edges, like the cards above */}
-          <CardHeader className="border-b sm:px-[max(1.5rem,calc((100%-46rem)/2))]">
+          <CardHeader className="border-b sm:px-[max(1.5rem,calc((100%-46rem)/2))] xl:sticky xl:top-14 xl:z-[1] xl:-mt-6 xl:rounded-t-2xl xl:bg-card xl:px-6 xl:pt-6">
             <CardTitle>Documentation</CardTitle>
             <CardDescription>Preview of the generated DOCUMENTATION.md. Select a diagram to enlarge it.</CardDescription>
             <CardAction>
@@ -400,8 +415,16 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
             <ZoomableArticle html={html} className={cn(PROSE, WIDE_PROSE)} />
           </CardContent>
         </Card>
+      ) : (
+        phase === 'running' && (
+          <div className="hidden min-h-[60vh] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-8 text-center xl:flex">
+            <FileText className="size-6 text-muted-foreground" />
+            <p className="font-medium">Your documentation appears here</p>
+            <p className="max-w-xs text-sm text-muted-foreground">{stepText}</p>
+          </div>
+        )
       )}
-    </>
+    </div>
   )
 }
 
@@ -615,6 +638,12 @@ function RepoInput({
   )
 }
 
+// Run times come from getHistory as local "YYYY-MM-DD HH:MM:SS"; empty while a run has not finished
+function runDuration(r: Run) {
+  const ms = Date.parse(r.finished.replace(' ', 'T')) - Date.parse(r.started.replace(' ', 'T'))
+  return Number.isFinite(ms) && ms >= 0 ? clock(Math.round(ms / 1000)) : ''
+}
+
 function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string; onRefresh: () => Promise<void> }) {
   const [refreshing, setRefreshing] = useState(false)
 
@@ -646,7 +675,8 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
                 <TableHead className="pl-4">ID</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Started</TableHead>
-                <TableHead className="hidden pr-4 sm:table-cell">Finished</TableHead>
+                <TableHead className="hidden sm:table-cell md:pr-2">Finished</TableHead>
+                <TableHead className="hidden pr-4 text-right md:table-cell">Duration</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -662,7 +692,8 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
                     {r.started || '—'}
                     {r.finished && <span className="block text-xs sm:hidden">Finished {r.finished.slice(11)}</span>}
                   </TableCell>
-                  <TableCell className="hidden pr-4 tabular-nums text-muted-foreground sm:table-cell">{r.finished || '—'}</TableCell>
+                  <TableCell className="hidden pr-4 tabular-nums text-muted-foreground sm:table-cell md:pr-2">{r.finished || '—'}</TableCell>
+                  <TableCell className="hidden pr-4 text-right tabular-nums text-muted-foreground md:table-cell">{runDuration(r) || '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
