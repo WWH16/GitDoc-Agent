@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, callWorkflow, currentStep, getHistory, getProgress, showProgressHint, timeline } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, getProgress, showProgressHint, timeline } from './api.ts'
 
 const reply = (status: number, body: unknown) => {
   globalThis.fetch = async () => new Response(JSON.stringify(body), { status })
@@ -105,3 +105,12 @@ test('getProgress reports final status and the first failed node', async () => {
   assert.equal(p?.status, 'error')
   assert.equal(p?.error, 'Supabase Vector Store: fetch failed')
 })
+
+test('recentTurns keeps the last 6 turns and trims each to 600 chars', () => {
+  const turns = Array.from({ length: 9 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `${i}`.repeat(700) }) as const)
+  const out = recentTurns([...turns])
+  assert.equal(out.length, 6)
+  assert.equal(out[0].text[0], '3')
+  assert.ok(out.every((t) => t.text.length === 600))
+})
+

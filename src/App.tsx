@@ -24,6 +24,7 @@ import {
   type Progress as RunProgress,
   type Result,
   type Run,
+  type Turn,
 } from './api'
 
 // partial: docs came back, but the execution failed later (Ask indexing)
@@ -395,7 +396,13 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
   )
 }
 
-type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; sources: string[] }
+// `text` is the raw answer sent back as history; chats saved before it existed only have `html`
+type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; text?: string; sources: string[] }
+
+const toTurn = (m: Message): Turn =>
+  m.role === 'user'
+    ? { role: 'user', text: m.text }
+    : { role: 'assistant', text: m.text ?? new DOMParser().parseFromString(m.html, 'text/html').body.textContent ?? '' }
 
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
@@ -422,9 +429,9 @@ function Ask({ repo, setRepo }: RepoProps) {
     setError('')
     setPending(true)
     try {
-      const { answer, sources } = await askRepo(repo.trim(), q, sessionId)
+      const { answer, sources } = await askRepo(repo.trim(), q, sessionId, messages.map(toTurn))
       const html = await renderMarkdown(answer)
-      setMessages((m) => [...m, { role: 'assistant', html, sources }])
+      setMessages((m) => [...m, { role: 'assistant', html, text: answer, sources }])
     } catch (e) {
       setError((e as Error).message)
     } finally {

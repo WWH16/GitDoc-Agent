@@ -69,8 +69,18 @@ export async function callWorkflow(repo: string): Promise<Result> {
 
 export const MAX_QUESTION = 1000
 
-export async function askRepo(repo: string, question: string, sessionId: string): Promise<Answer> {
-  const data = await post('/api/ask', { repo, question, sessionId })
+export type Turn = { role: 'user' | 'assistant'; text: string }
+
+// 3 question/answer pairs, trimmed, so follow-ups keep context without blowing the model's token budget
+export const MAX_TURNS = 6
+export const MAX_TURN_CHARS = 600
+
+/** The last few turns of the chat, trimmed, sent with each question so follow-ups like "where is that used?" work. */
+export const recentTurns = (turns: Turn[]): Turn[] =>
+  turns.slice(-MAX_TURNS).map((t) => ({ role: t.role, text: t.text.slice(0, MAX_TURN_CHARS) }))
+
+export async function askRepo(repo: string, question: string, sessionId: string, history: Turn[] = []): Promise<Answer> {
+  const data = await post('/api/ask', { repo, question, sessionId, history: recentTurns(history) })
   if (typeof data.answer !== 'string') throw new Error('The assistant returned no answer.')
   const sources = Array.isArray(data.sources) ? data.sources.filter((s): s is string => typeof s === 'string') : []
   return { answer: data.answer, sources }
