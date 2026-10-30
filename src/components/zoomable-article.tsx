@@ -6,7 +6,8 @@ import { drawDiagram } from '@/lib/diagrams'
 import { cn } from '@/lib/utils'
 
 type View = { scale: number; x: number; y: number }
-type Shown = { src: string; alt: string; w: number; h: number }
+// themed: drawn in the page's light or dark theme (src/lib/diagrams.ts), not on white like the workflow's drawings
+type Shown = { src: string; alt: string; w: number; h: number; themed: boolean }
 
 const MIN = 0.1
 const MAX = 8
@@ -173,16 +174,17 @@ export function ZoomableArticle({ html, className, outline }: { html: string; cl
   useEffect(() => {
     let current = true
     article.current?.querySelectorAll<HTMLElement>('.md-mermaid').forEach((box, i) => {
-      const show = (src: string) => {
+      const show = (src: string, themed = false) => {
         if (!current) return
         const img = box.querySelector('img') ?? box.insertAdjacentElement('afterbegin', document.createElement('img'))
         if (!(img instanceof HTMLImageElement)) return
         img.src = src
         img.alt = `Diagram ${i + 1}`
+        img.toggleAttribute('data-themed', themed)
         prepare(img, img.alt)
         box.dataset.state = 'drawn'
       }
-      drawDiagram(box.querySelector('code')?.textContent ?? '', dark).then(show, () => {
+      drawDiagram(box.querySelector('code')?.textContent ?? '', dark).then((src) => show(src, true), () => {
         if (box.dataset.fallback) return show(box.dataset.fallback)
         if (!current) return
         box.dataset.state = 'failed'
@@ -196,7 +198,7 @@ export function ZoomableArticle({ html, className, outline }: { html: string; cl
 
   function open(target: EventTarget) {
     if (!(target instanceof HTMLImageElement)) return
-    setShown({ src: target.src, alt: target.alt || 'Diagram', ...intrinsicSize(target) })
+    setShown({ src: target.src, alt: target.alt || 'Diagram', themed: target.hasAttribute('data-themed'), ...intrinsicSize(target) })
   }
 
   // The copy buttons come from the HTML, so one listener on the article serves them all
@@ -391,7 +393,10 @@ function Viewer({ shown, onClose }: { shown: Shown; onClose: () => void }) {
             height: shown.h,
             transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
           }}
-          className="absolute top-0 left-0 max-w-none origin-top-left rounded-xl bg-white p-4 shadow-sm ring-1 ring-border"
+          className={cn(
+            'absolute top-0 left-0 max-w-none origin-top-left rounded-xl p-4 shadow-sm ring-1 ring-border',
+            shown.themed ? 'bg-card' : 'bg-white',
+          )}
         />
       </div>
 
