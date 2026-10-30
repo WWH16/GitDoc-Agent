@@ -1,5 +1,5 @@
 import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, Maximize2, RefreshCw, SquarePen } from 'lucide-react'
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +9,7 @@ import { linkError } from '@/lib/session'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { ZoomableArticle } from '@/components/zoomable-article'
+import { Contents, sectionsOf, useActiveSection, ZoomableArticle } from '@/components/zoomable-article'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -371,6 +371,12 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
   const showDocs = !!result && phase !== 'error'
   const split = showDocs || phase === 'running'
 
+  // The docs' contents, in the rail under the form from 1280px
+  const docs = useRef<HTMLDivElement>(null)
+  const sections = useMemo(() => (showDocs ? sectionsOf(html) : []), [showDocs, html])
+  const active = useActiveSection(sections, docs)
+  const jump = (id: string) => docs.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
+
   return (
     <div
       className={cn(
@@ -378,7 +384,8 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
         split && 'xl:grid xl:max-w-none xl:grid-cols-[24rem_minmax(0,1fr)] xl:items-start xl:gap-10 xl:space-y-0',
       )}
     >
-    <div className={cn('space-y-6 sm:space-y-8', split && 'xl:sticky xl:top-[5.5rem]')}>
+    {/* The rail never runs past the screen: the contents list gives way and scrolls on its own */}
+    <div className={cn('space-y-6 sm:space-y-8', split && 'xl:sticky xl:top-[5.5rem] xl:flex xl:max-h-[calc(100dvh-7rem)] xl:flex-col')}>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Generate documentation</h1>
         <p className="text-sm text-muted-foreground">Turn any GitHub repository into readable docs with diagrams.</p>
@@ -439,6 +446,10 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
         )}
       </form>
 
+      {sections.length > 0 && (
+        <Contents sections={sections} active={active} onJump={jump} className="hidden min-h-40 overflow-y-auto xl:-mx-2 xl:block" />
+      )}
+
       {phase !== 'idle' && (
         <Card>
           <CardHeader>
@@ -464,7 +475,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
             )}
             {nodes.length > 0 && (
               // In the sticky rail the node list scrolls on its own, so the rail never runs past the screen
-              <ol className={cn('divide-y rounded-xl border text-sm', split && 'xl:max-h-[calc(100dvh-32rem)] xl:min-h-32 xl:overflow-y-auto')}>
+              <ol className={cn('divide-y rounded-xl border text-sm', split && 'xl:overflow-y-auto', showDocs ? 'xl:max-h-40' : split && 'xl:max-h-[calc(100dvh-32rem)] xl:min-h-32')}>
                 {nodes.map((n) => (
                   <li key={n.name} className="flex items-center gap-3 px-3 py-2">
                     {n.status === 'running' ? (
@@ -516,8 +527,8 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
               </Button>
             </CardAction>
           </CardHeader>
-          <CardContent className="xl:[--heading-offset:11rem]">
-            <ZoomableArticle html={html} outline="sidebar" className={cn(PROSE, WIDE_PROSE)} />
+          <CardContent ref={docs} className="xl:[--heading-offset:11rem]">
+            <ZoomableArticle html={html} outline="xl:hidden" className={cn(PROSE, WIDE_PROSE)} />
           </CardContent>
           {fullView && result && (
             <DocViewer html={html} markdown={result.markdown} proseClass={PROSE} onDownload={download} onClose={() => setFullView(false)} />

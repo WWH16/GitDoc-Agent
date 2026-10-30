@@ -101,8 +101,21 @@ export function Contents({
   onJump: (id: string) => void
   className?: string
 }) {
+  // A list that scrolls on its own keeps the section being read in view (by hand: scrollIntoView would move the page)
+  const nav = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const item = nav.current?.querySelector('[aria-current]')
+    if (!nav.current || !item) return
+    const box = nav.current.getBoundingClientRect()
+    const at = item.getBoundingClientRect()
+    // The first section brings the list back to its top, label included
+    if (item === nav.current.querySelector('button')) nav.current.scrollTop = 0
+    else if (at.top < box.top) nav.current.scrollTop -= box.top - at.top
+    else if (at.bottom > box.bottom) nav.current.scrollTop += at.bottom - box.bottom
+  }, [active])
+
   return (
-    <nav aria-label="Contents" className={className}>
+    <nav ref={nav} aria-label="Contents" className={className}>
       <p className="px-2 pb-2 text-sm font-medium">Contents</p>
       <ol className="space-y-0.5 text-sm">
         {sections.map((s) => (
@@ -127,22 +140,12 @@ export function Contents({
 }
 
 /** Rendered Markdown (src/lib/markdown.ts) whose images open in an in-page viewer with zoom and pan, and whose code
- *  blocks copy. With `outline`, a doc of three or more sections gets a contents list: a sticky sidebar from 1280px
- *  (`outline="sidebar"`), and above the doc below that. */
-export function ZoomableArticle({
-  html,
-  className,
-  outline,
-}: {
-  html: string
-  className?: string
-  outline?: 'sidebar' | 'list'
-}) {
+ *  blocks copy. With `outline`, a doc of three or more sections opens with a contents list; `outline` holds its extra
+ *  classes, such as hiding it where a <Contents> sidebar takes over. */
+export function ZoomableArticle({ html, className, outline }: { html: string; className?: string; outline?: string }) {
   const article = useRef<HTMLElement>(null)
   const [shown, setShown] = useState<Shown | null>(null)
-  const sections = useMemo(() => (outline ? sectionsOf(html) : []), [html, outline])
-  const active = useActiveSection(outline === 'sidebar' ? sections : [], article)
-  const top = sections.filter((s) => !s.sub)
+  const top = useMemo(() => (outline === undefined ? [] : sectionsOf(html).filter((s) => !s.sub)), [html, outline])
   // Searched inside this article: a full view of the same doc may share these ids
   const jump = (id: string) => article.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
 
@@ -179,26 +182,14 @@ export function ZoomableArticle({
     )
   }
 
-  const withContents = !!outline && top.length >= 3
-
   return (
-    <div className={cn(withContents && outline === 'sidebar' && 'xl:grid xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10')}>
-      {withContents && outline === 'sidebar' && (
-        // Below the docs card's sticky header (App.tsx), scrolling on its own when the list is long
-        <Contents
-          sections={sections}
-          active={active}
-          onJump={jump}
-          className="sticky top-44 hidden max-h-[calc(100dvh-12rem)] self-start overflow-y-auto pr-2 xl:block"
-        />
-      )}
-      <div className="min-w-0">
-      {withContents && (
-        // Lines up with the docs' text column (WIDE_PROSE in App.tsx); from 1280px the sidebar replaces it
+    <>
+      {top.length >= 3 && (
+        // Lines up with the docs' text column (WIDE_PROSE in App.tsx)
         <details
           className={cn(
-            'mb-6 ml-[max(0px,calc((100%-46rem)/2))] max-w-[70ch] rounded-xl border px-4 py-3 text-sm [&[open]>summary]:mb-2',
-            outline === 'sidebar' ? 'xl:hidden' : 'xl:ml-0',
+            'mb-6 ml-[max(0px,calc((100%-46rem)/2))] max-w-[70ch] rounded-xl border px-4 py-3 text-sm xl:ml-0 [&[open]>summary]:mb-2',
+            outline,
           )}
         >
           <summary className="cursor-pointer font-medium select-none">Contents, {top.length} sections</summary>
@@ -235,9 +226,8 @@ export function ZoomableArticle({
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      </div>
       {shown && <Viewer shown={shown} onClose={() => setShown(null)} />}
-    </div>
+    </>
   )
 }
 

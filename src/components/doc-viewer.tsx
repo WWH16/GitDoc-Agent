@@ -77,8 +77,8 @@ export function DocViewer({
           <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
             {view === 'preview' ? (
               // Below lg the sidebar is hidden, so the article's own contents list stands in for it
-              <div className="mx-auto max-w-4xl px-4 py-8 [--heading-offset:1.5rem] sm:px-8 sm:py-12 lg:[&>div>div>details]:hidden">
-                <ZoomableArticle html={html} outline="list" className={proseClass} />
+              <div className="mx-auto max-w-4xl px-4 py-8 [--heading-offset:1.5rem] sm:px-8 sm:py-12">
+                <ZoomableArticle html={html} outline="lg:hidden" className={proseClass} />
               </div>
             ) : (
               <pre className="mx-auto max-w-5xl px-4 py-8 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap sm:px-8">
