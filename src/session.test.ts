@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { redirectError, sessionToken, type Auth } from './lib/session.ts'
+import { authMessage, sessionToken, type Auth } from './lib/session.ts'
 
 const auth = (getSession: Auth['getSession'], signIns: string[]): Auth => ({
   getSession,
@@ -24,12 +24,13 @@ test('no session at all signs in anonymously once', async () => {
   assert.deepEqual(signIns, ['new'])
 })
 
-test('redirectError reads what Google sign-in sent back in the URL', () => {
-  const linked = 'http://localhost:5173/app/#error=server_error&error_code=identity_already_exists&error_description=Identity+is+already+linked+to+another+user'
-  assert.deepEqual(redirectError(linked), { code: 'identity_already_exists', message: 'Identity is already linked to another user' })
-  assert.deepEqual(redirectError('http://localhost:5173/app/?error=access_denied&error_code=access_denied&error_description=Denied'), {
-    code: 'access_denied',
-    message: 'Denied',
-  })
-  assert.equal(redirectError('http://localhost:5173/app/?repo=x'), null)
+test('authMessage puts Supabase sign-in errors in plain words', () => {
+  assert.equal(authMessage({ code: 'invalid_credentials', message: 'Invalid login credentials' }), 'Wrong email or password.')
+  assert.equal(
+    authMessage({ code: 'email_exists', message: 'A user with this email address has already been registered' }),
+    'This email already has saved history. Choose "Already saved? Sign in".',
+  )
+  assert.equal(authMessage({ code: 'weak_password', message: 'Password should be at least 6 characters.' }), 'Use a password of at least 6 characters.')
+  assert.equal(authMessage({ status: 429, message: 'Request rate limit reached' }), 'Too many tries. Wait a few minutes and try again.')
+  assert.equal(authMessage({ message: 'Something odd' }), 'Something odd')
 })

@@ -23,11 +23,12 @@ export async function sessionToken(auth: Auth): Promise<string> {
   return signingIn
 }
 
-/** The error a Google sign-in brought back in the URL (Supabase puts it in the query or the hash), or null. */
-export function redirectError(url: string): { code: string; message: string } | null {
-  const u = new URL(url)
-  const hash = new URLSearchParams(u.hash.slice(1))
-  const get = (key: string) => u.searchParams.get(key) ?? hash.get(key)
-  const code = get('error_code') ?? get('error')
-  return code ? { code, message: get('error_description') ?? code } : null
+/** Supabase's sign-in errors in plain words; anything else keeps Supabase's own message. */
+export function authMessage(error: { code?: string; status?: number; message: string }): string {
+  const { code, message: m } = error
+  if (error.status === 429 || /rate limit/i.test(m)) return 'Too many tries. Wait a few minutes and try again.'
+  if (code === 'invalid_credentials' || /invalid login credentials/i.test(m)) return 'Wrong email or password.'
+  if (code === 'email_exists' || /already (been )?registered/i.test(m)) return 'This email already has saved history. Choose "Already saved? Sign in".'
+  if (code === 'weak_password' || /password should be/i.test(m)) return 'Use a password of at least 6 characters.'
+  return m
 }
