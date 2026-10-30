@@ -39,12 +39,6 @@ export default defineConfig(({ mode }) => {
         '/api/generate': hook(webhookPath, 300_000),
         // Ask can take 2+ minutes: each Gemini call on the free tier takes ~20 s and the agent makes several
         '/api/ask': hook(askPath, 300_000),
-        '/api/executions': {
-          target: n8n,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/executions\??/, `/api/v1/executions?workflowId=${workflowId}&`),
-          headers: { 'X-N8N-API-KEY': env.N8N_API_KEY ?? '' },
-        },
       },
     },
   }

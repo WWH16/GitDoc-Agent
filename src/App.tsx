@@ -18,12 +18,11 @@ import {
   askRepo,
   callWorkflow,
   currentStep,
-  getHistory,
   getProgress,
   type Result,
-  type Run,
   type Turn,
 } from './api'
+import { listGenerations, loadGeneration, saveGeneration, type Generation } from './lib/history'
 import { showProgressHint, type NodeRun, type Progress as RunProgress } from './progress'
 
 // partial: docs came back, but the execution failed later (Ask indexing)
@@ -99,27 +98,39 @@ type RepoProps = { repo: string; setRepo: (v: string) => void }
 // The landing page's form links here as /app/?repo=<url>; that beats the saved repo
 const LANDING_REPO = new URLSearchParams(location.search).get('repo')
 if (LANDING_REPO) save('gitdoc:repo', LANDING_REPO)
+// Docs used to be kept in this browser (up to a few MB); they live in Run history now
+save('gitdoc:last-run', null)
 
 export default function App() {
   const [repo, setRepo] = useSavedState('gitdoc:repo', () => '')
-  const [runs, setRuns] = useState<Run[] | null>(null)
+  const [tab, setTab] = useState('generate')
+  const [generations, setGenerations] = useState<Generation[] | null>(null)
   const [historyError, setHistoryError] = useState('')
+  // Docs reopened from Run history; the Generate tab shows them
+  const [opened, setOpened] = useState<Generation | null>(null)
 
   const refresh = useCallback(async () => {
     try {
-      setRuns(await getHistory())
+      setGenerations(await listGenerations())
       setHistoryError('')
     } catch (e) {
       setHistoryError(`Could not load run history: ${(e as Error).message}`)
     }
   }, [])
 
-  useEffect(() => {
-    refresh()
-  }, [refresh])
+  function changeTab(value: string) {
+    setTab(value)
+    if (value === 'history') refresh()
+  }
+
+  function open(g: Generation) {
+    setOpened(g)
+    setRepo(g.repo)
+    setTab('generate')
+  }
 
   return (
-    <Tabs defaultValue="generate" className="min-h-screen gap-0">
+    <Tabs value={tab} onValueChange={changeTab} className="min-h-screen gap-0">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4 xl:max-w-[88rem]">
           <a href="/" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
@@ -140,13 +151,13 @@ export default function App() {
       <main className="mx-auto w-full max-w-3xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-6 sm:py-10 xl:max-w-[88rem]">
         {/* forceMount keeps every tab mounted: results, chat and a running generation survive tab switches */}
         <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
-          <Generate repo={repo} setRepo={setRepo} onFinished={refresh} />
+          <Generate repo={repo} setRepo={setRepo} opened={opened} onFinished={refresh} />
         </TabsContent>
         <TabsContent value="ask" forceMount className="mx-auto w-full max-w-3xl data-[state=inactive]:hidden 2xl:max-w-4xl">
           <Ask repo={repo} setRepo={setRepo} />
         </TabsContent>
         <TabsContent value="history" forceMount className="mx-auto w-full max-w-3xl space-y-6 data-[state=inactive]:hidden sm:space-y-8 xl:max-w-5xl">
-          <History runs={runs} error={historyError} onRefresh={refresh} />
+          <History generations={generations} error={historyError} onRefresh={refresh} onOpen={open} />
         </TabsContent>
       </main>
     </Tabs>
@@ -184,26 +195,36 @@ function ThemeToggle() {
   )
 }
 
-// The last finished run, restored when you come back to the app
-type SavedRun = { phase: Phase; nodes: NodeRun[]; runId: string; elapsed: number; result: Result; html: string; error: string }
-const SAVED_RUN = 'gitdoc:last-run'
-
-function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () => void }) {
-  const [saved] = useState(() => load<SavedRun>(SAVED_RUN))
-  const [phase, setPhase] = useState<Phase>(saved?.phase ?? 'idle')
+function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: Generation | null; onFinished: () => void }) {
+  const [phase, setPhase] = useState<Phase>('idle')
   const [step, setStep] = useState<number | null>(null)
-  const [nodes, setNodes] = useState<NodeRun[]>(saved?.nodes ?? [])
-  const [runId, setRunId] = useState(saved?.runId ?? '')
-  const [elapsed, setElapsed] = useState(saved?.elapsed ?? 0)
-  const [result, setResult] = useState<Result | null>(saved?.result ?? null)
-  const [html, setHtml] = useState(saved?.html ?? '')
-  const [error, setError] = useState(saved?.error ?? '')
+  const [nodes, setNodes] = useState<NodeRun[]>([])
+  const [runId, setRunId] = useState('')
+  const [elapsed, setElapsed] = useState(0)
+  const [result, setResult] = useState<Result | null>(null)
+  const [html, setHtml] = useState('')
+  const [error, setError] = useState('')
+  const [saveError, setSaveError] = useState('')
 
-  // Save each finished run; a new run clears the old one so its docs never come back as the new repo's
+  // Docs opened from Run history replace what this tab shows, unless a run is going (it keeps the tab)
   useEffect(() => {
-    if (phase === 'running') save(SAVED_RUN, null)
-    if ((phase === 'done' || phase === 'partial') && result) save(SAVED_RUN, { phase, nodes, runId, elapsed, result, html, error })
-  }, [phase, nodes, runId, elapsed, result, html, error])
+    if (!opened || phase === 'running') return
+    let current = true
+    renderMarkdown(opened.preview).then((h) => {
+      if (!current) return
+      setPhase('idle')
+      setNodes([])
+      setRunId('')
+      setError('')
+      setSaveError('')
+      setResult({ markdown: opened.markdown, preview: opened.preview })
+      setHtml(h)
+    })
+    return () => {
+      current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a newly opened generation should replace the docs
+  }, [opened])
 
   // The id this browser gave its current run (not n8n's execution id, which `runId` shows)
   const myRun = useRef('')
@@ -256,11 +277,13 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     setRunId('')
     setElapsed(0)
     setError('')
+    setSaveError('')
     setResult(null)
     // A random id for this run: the server finds our execution by it, and nobody else knows it
     const run = (myRun.current = crypto.randomUUID())
+    let res: Result
     try {
-      const res = await callWorkflow(url, run)
+      res = await callWorkflow(url, run)
       setHtml(await renderMarkdown(res.preview))
       setResult(res)
     } catch (e) {
@@ -278,11 +301,17 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
       await new Promise((r) => setTimeout(r, 3000))
     }
     applyProgress(p)
+    let status = 'success'
     if (p && FAILED.has(p.status)) {
       setError(p.error || `n8n marked execution #${p.id} as ${p.status}.`)
       setPhase('partial')
+      status = 'partial'
     } else setPhase('done')
-    onFinished()
+    // The docs stay on screen either way; only the history entry is missing if this fails
+    await saveGeneration({ repo: url, status, markdown: res.markdown, preview: res.preview, executionId: p?.id ?? '' }).then(
+      onFinished,
+      () => setSaveError("Couldn't save this run to your history."),
+    )
   }
 
   function download() {
@@ -344,12 +373,18 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
           role={phase === 'error' || phase === 'partial' ? 'alert' : undefined}
           aria-live="polite"
         >
-          {phase === 'idle' && 'Paste a public GitHub URL and press Enter.'}
+          {phase === 'idle' &&
+            (result ? 'Opened from Run history. Generate again for the latest version.' : 'Paste a public GitHub URL and press Enter.')}
           {phase === 'running' && 'This usually takes a few minutes. Keep this tab open.'}
           {phase === 'done' && `Documentation generated in ${clock(elapsed)}.`}
           {phase === 'partial' && `Documentation generated in ${clock(elapsed)}, but the run failed after that, so Ask may not know this repo. ${error}`}
           {phase === 'error' && error}
         </p>
+        {saveError && (
+          <p className="text-sm text-warning" role="alert">
+            {saveError}
+          </p>
+        )}
       </form>
 
       {phase !== 'idle' && (
@@ -720,21 +755,43 @@ function RepoInput({
   )
 }
 
-// Run times come from getHistory as local "YYYY-MM-DD HH:MM:SS"; empty while a run has not finished
-function runDuration(r: Run) {
-  const ms = Date.parse(r.finished.replace(' ', 'T')) - Date.parse(r.started.replace(' ', 'T'))
-  return Number.isFinite(ms) && ms >= 0 ? clock(Math.round(ms / 1000)) : ''
-}
+// sv-SE formats as YYYY-MM-DD HH:MM in local time
+const localTime = (iso: string) => new Date(iso).toLocaleString('sv-SE').slice(0, 16)
+const repoName = (url: string) => url.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\.git$/, '')
 
-function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string; onRefresh: () => Promise<void> }) {
+function History({
+  generations,
+  error,
+  onRefresh,
+  onOpen,
+}: {
+  generations: Generation[] | null
+  error: string
+  onRefresh: () => Promise<void>
+  onOpen: (g: Generation) => void
+}) {
   const [refreshing, setRefreshing] = useState(false)
+  const [opening, setOpening] = useState('')
+  const [openError, setOpenError] = useState('')
+
+  async function open(id: string) {
+    setOpening(id)
+    setOpenError('')
+    try {
+      onOpen(await loadGeneration(id))
+    } catch (e) {
+      setOpenError(`Could not open these docs: ${(e as Error).message}`)
+    } finally {
+      setOpening('')
+    }
+  }
 
   return (
     <>
       <div className="flex items-end justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
-          <p className="text-sm text-muted-foreground">The 20 most recent workflow executions.</p>
+          <p className="text-sm text-muted-foreground">Your 20 most recent docs. Only you can see them.</p>
         </div>
         <Button variant="outline" size="sm" onClick={async () => { setRefreshing(true); await onRefresh(); setRefreshing(false) }}
           disabled={refreshing} aria-label="Refresh" className="shrink-0">
@@ -743,39 +800,58 @@ function History({ runs, error, onRefresh }: { runs: Run[] | null; error: string
         </Button>
       </div>
 
+      {openError && (
+        <p className="text-sm text-destructive" role="alert">
+          {openError}
+        </p>
+      )}
+
       <Card className="overflow-hidden py-0">
         {error ? (
           <p className="px-6 py-10 text-center text-sm text-destructive" role="alert">{error}</p>
-        ) : runs === null ? (
+        ) : generations === null ? (
           <p className="px-6 py-10 text-center text-sm text-muted-foreground">Loading…</p>
-        ) : runs.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-muted-foreground">No runs yet. Generate docs to see them here.</p>
+        ) : generations.length === 0 ? (
+          <p className="px-6 py-10 text-center text-sm text-muted-foreground">No docs yet. Generate docs to see them here.</p>
         ) : (
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="pl-4">ID</TableHead>
+                <TableHead className="pl-4">Repository</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead className="hidden sm:table-cell md:pr-2">Finished</TableHead>
-                <TableHead className="hidden pr-4 text-right md:table-cell">Duration</TableHead>
+                <TableHead className="hidden sm:table-cell">Created</TableHead>
+                <TableHead className="pr-4">
+                  <span className="sr-only">Open</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {runs.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="pl-4 font-medium tabular-nums">#{r.id}</TableCell>
+              {generations.map((g) => (
+                <TableRow key={g.id}>
+                  <TableCell className="pl-4 font-medium">
+                    <span className="block max-w-[11rem] truncate sm:max-w-xs" title={g.repo}>
+                      {repoName(g.repo)}
+                    </span>
+                    <span className="block text-xs font-normal tabular-nums text-muted-foreground sm:hidden">{localTime(g.createdAt)}</span>
+                  </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={cn('capitalize', TONE[STATUS_TONE[r.status] ?? 'neutral'])}>
-                      {r.status || 'unknown'}
+                    <Badge variant="outline" className={cn('capitalize', TONE[STATUS_TONE[g.status] ?? 'neutral'])}>
+                      {g.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="pr-4 tabular-nums text-muted-foreground sm:pr-2">
-                    {r.started || '—'}
-                    {r.finished && <span className="block text-xs sm:hidden">Finished {r.finished.slice(11)}</span>}
+                  <TableCell className="hidden tabular-nums text-muted-foreground sm:table-cell">{localTime(g.createdAt)}</TableCell>
+                  <TableCell className="pr-4 text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => open(g.id)}
+                      disabled={!!opening}
+                      aria-label={`Open docs for ${repoName(g.repo)}`}
+                    >
+                      {opening === g.id && <Loader2 className="animate-spin" />}
+                      Open
+                    </Button>
                   </TableCell>
-                  <TableCell className="hidden pr-4 tabular-nums text-muted-foreground sm:table-cell md:pr-2">{r.finished || '—'}</TableCell>
-                  <TableCell className="hidden pr-4 text-right tabular-nums text-muted-foreground md:table-cell">{runDuration(r) || '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -34,6 +34,9 @@ test('limiter error is 503', async () => {
 
 test('unknown api path is 404', async () => assert.equal(await status(guard(req('/api/other'), deps())), 404))
 
+// The old passthrough returned every user's n8n executions
+test('/api/executions is gone', async () => assert.equal(await status(guard(req('/api/executions'), deps())), 404))
+
 // An execution started by run `runId`, with a node that carries file contents (which must never reach the browser)
 const exec = (id: string, runId: string): Execution => ({
   id,

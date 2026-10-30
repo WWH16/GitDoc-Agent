@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, setTokenSource } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, currentStep, setTokenSource } from './api.ts'
 import { showProgressHint, timeline, toProgress } from './progress.ts'
 
 const reply = (status: number, body: unknown) => {
@@ -72,11 +72,6 @@ test('callWorkflow requires markdown and falls back to it for preview', async ()
   assert.deepEqual(await callWorkflow('r', 'run1'), { markdown: '# Doc', preview: '# Doc' })
   reply(200, { preview: 'x' })
   await assert.rejects(callWorkflow('r', 'run1'))
-})
-
-test('getHistory drops entries without an id and blanks bad dates', async () => {
-  reply(200, { data: [{ id: 7, status: 'success', startedAt: 'nope' }, { status: 'error' }] })
-  assert.deepEqual(await getHistory(), [{ id: '7', status: 'success', started: '', finished: '' }])
 })
 
 test('network failure on ask gives a fixed message', async () => {

@@ -21,12 +21,10 @@ export const RULES: Record<Kind, Rule[]> = {
   progress: [{ scope: 'user', limit: 40, window: '1 minute' }],
 }
 
-// /api/executions is the old progress passthrough; it goes once Run history reads Supabase instead
 const KINDS: Record<string, Kind> = {
   '/api/generate': 'generate',
   '/api/ask': 'ask',
   '/api/progress': 'progress',
-  '/api/executions': 'progress',
 }
 
 const RETRY_AFTER: Record<string, [seconds: number, phrase: string]> = {

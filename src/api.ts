@@ -6,9 +6,7 @@ export type Result = { markdown: string; preview: string }
 
 export type Answer = { answer: string; sources: string[] }
 
-export type Run = { id: string; status: string; started: string; finished: string }
-
-import type { Execution, Progress } from './progress.ts'
+import type { Progress } from './progress.ts'
 
 // (label, n8n node whose completion starts the step)
 export const STEPS: [string, string | null][] = [
@@ -95,35 +93,6 @@ export async function askRepo(
   if (typeof data.answer !== 'string') throw new Error('The assistant returned no answer.')
   const sources = Array.isArray(data.sources) ? data.sources.filter((s): s is string => typeof s === 'string') : []
   return { answer: data.answer, sources }
-}
-
-/** n8n executions for this workflow; the proxy adds workflowId and the API key. Entries without an id are dropped. */
-async function executions(query: string): Promise<Execution[]> {
-  const r = await fetch(`/api/executions?${query}`, { headers: await authHeader() })
-  if (r.status === 401) throw new Error(SIGNED_OUT)
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  const body: unknown = await r.json().catch(() => null)
-  if (!isObject(body) || !Array.isArray(body.data)) throw new Error('Invalid response from n8n.')
-  return body.data
-    .filter((e): e is Execution => isObject(e) && (typeof e.id === 'string' || typeof e.id === 'number'))
-    .map((e) => ({ ...e, id: String(e.id) }))
-}
-
-const str = (v: unknown) => (typeof v === 'string' ? v : '')
-
-// sv-SE formats as YYYY-MM-DD HH:MM:SS in local time
-function localTime(stamp: unknown) {
-  const s = str(stamp), d = new Date(s)
-  return s && !isNaN(+d) ? d.toLocaleString('sv-SE') : ''
-}
-
-export async function getHistory(): Promise<Run[]> {
-  return (await executions('limit=20')).map((e) => ({
-    id: e.id,
-    status: str(e.status),
-    started: localTime(e.startedAt),
-    finished: localTime(e.stoppedAt),
-  }))
 }
 
 /** The timeline of the run this browser started with `runId`, or null while the server cannot find it yet.
