@@ -7,18 +7,37 @@ export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.m
 /** The current session's access token. The first visit signs in anonymously: no form, the account is this browser. */
 export const accessToken = () => sessionToken(supabase.auth)
 
-/** Gives this browser's anonymous account an email and password. The user id stays the same, so every doc and chat
- *  is kept. Needs "Confirm email" off in Supabase; otherwise Supabase emails a confirmation link first. */
-export async function saveHistory(email: string, password: string): Promise<void> {
+// Email links open the app again (the URL must be listed in Supabase → Authentication → URL Configuration)
+const redirect = () => `${location.origin}/app/`
+
+/** Step 1 of saving the history: adds an email to this browser's anonymous account (same user id, so every doc and
+ *  chat stays). Supabase emails a confirmation link; 'confirmed' when the project skips that ("Confirm email" off). */
+export async function sendConfirmation(email: string): Promise<'sent' | 'confirmed'> {
   await accessToken()
-  const added = await supabase.auth.updateUser({ email })
-  if (added.error) throw new Error(authMessage(added.error))
-  if (added.data.user?.email?.toLowerCase() !== email.toLowerCase()) {
-    throw new Error('Confirm your email from the link Supabase sent, then sign in.')
-  }
-  // A second call: Supabase only sets a password once the account has an email. Retrying after a failure here is safe.
-  const { error } = await supabase.auth.updateUser({ password })
+  const { data, error } = await supabase.auth.updateUser({ email }, { emailRedirectTo: redirect() })
   if (error) throw new Error(authMessage(error))
+  return data.user?.email?.toLowerCase() === email.toLowerCase() ? 'confirmed' : 'sent'
+}
+
+export async function resendConfirmation(email: string): Promise<void> {
+  const { error } = await supabase.auth.resend({ type: 'email_change', email, options: { emailRedirectTo: redirect() } })
+  if (error) throw new Error(authMessage(error))
+}
+
+/** Step 2, once the email is confirmed (Supabase allows a password only then). Also the end of a password reset. */
+export async function setPassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password, data: { password_set: true } })
+  if (error) throw new Error(authMessage(error))
+}
+
+export async function sendPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirect() })
+  if (error) throw new Error(authMessage(error))
+}
+
+/** Reloads the user from Supabase, e.g. after the email was confirmed in another tab or on another device. */
+export async function refreshAccount(): Promise<void> {
+  await supabase.auth.refreshSession()
 }
 
 /** Signs in to history saved earlier, e.g. on another device; this browser's anonymous history stays behind. */

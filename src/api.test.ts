@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, accountState, currentStep, historySummary, repoKey, setTokenSource } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, accountState, currentStep, historySummary, needsPassword, repoKey, setTokenSource } from './api.ts'
 import { showProgressHint, timeline, toProgress } from './progress.ts'
 
 const reply = (status: number, body: unknown) => {
@@ -150,4 +150,11 @@ test('historySummary counts what this browser keeps or loses', () => {
   assert.equal(historySummary({ docs: 1, chats: 0 }), '1 doc')
   assert.equal(historySummary({ docs: 0, chats: 2 }), '2 chats')
   assert.equal(historySummary({ docs: 0, chats: 0 }), '')
+})
+
+test('needsPassword only after the email is confirmed and before a password is chosen', () => {
+  assert.equal(needsPassword(null), false)
+  assert.equal(needsPassword({ is_anonymous: true }), false)
+  assert.equal(needsPassword({ is_anonymous: false, email: 'a@b.c' }), true)
+  assert.equal(needsPassword({ is_anonymous: false, email: 'a@b.c', user_metadata: { password_set: true } }), false)
 })

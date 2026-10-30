@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { authMessage, sessionToken, type Auth } from './lib/session.ts'
+import { authMessage, linkError, sessionToken, type Auth } from './lib/session.ts'
 
 const USER_GONE = { code: 'user_not_found', status: 403, message: 'User from sub claim in JWT does not exist' }
 
@@ -53,10 +53,25 @@ test('authMessage puts Supabase sign-in errors in plain words', () => {
   assert.equal(authMessage({ code: 'invalid_credentials', message: 'Invalid login credentials' }), 'Wrong email or password.')
   assert.equal(
     authMessage({ code: 'email_exists', message: 'A user with this email address has already been registered' }),
-    'This email already has saved history. Choose "Already saved? Sign in".',
+    'This email already has saved history. Use the Sign in tab.',
   )
   assert.equal(authMessage({ code: 'weak_password', message: 'Password should be at least 6 characters.' }), 'Use a password of at least 6 characters.')
   assert.equal(authMessage({ status: 429, message: 'Request rate limit reached' }), 'Too many tries. Wait a few minutes and try again.')
   assert.equal(authMessage(USER_GONE), 'Your session ended. Reload the page.')
+  assert.equal(
+    authMessage({ code: 'over_email_send_rate_limit', status: 429, message: 'email rate limit exceeded' }),
+    'Too many emails were sent. Wait a few minutes and try again.',
+  )
+  assert.equal(authMessage({ code: 'email_address_invalid', message: 'Email address "x@y" is invalid' }), 'Enter a valid email address.')
+  assert.equal(authMessage({ code: 'same_password', message: 'New password should be different from the old password.' }), 'Choose a password different from your current one.')
   assert.equal(authMessage({ message: 'Something odd' }), 'Something odd')
+})
+
+test('linkError explains an email link that did not work', () => {
+  assert.equal(
+    linkError('http://localhost:5173/app/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'),
+    'That link expired or was already used. Send a new one.',
+  )
+  assert.equal(linkError('http://localhost:5173/app/?error=server_error&error_description=Something+broke'), 'Something broke')
+  assert.equal(linkError('http://localhost:5173/app/#access_token=x&type=email_change'), null)
 })

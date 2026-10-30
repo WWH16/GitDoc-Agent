@@ -6,6 +6,12 @@ export const URL_PLACEHOLDER = 'https://github.com/<username>/<repo-name>'
 export const accountState = (user: { is_anonymous?: boolean; email?: string } | null): 'none' | 'anonymous' | 'saved' =>
   !user ? 'none' : user.is_anonymous ? 'anonymous' : 'saved'
 
+/** A confirmed email but no password yet: the last step of saving the history (Supabase allows a password only once
+ *  the email is confirmed). `password_set` is written to the user's metadata when the password is chosen. */
+export const needsPassword = (
+  user: { is_anonymous?: boolean; email?: string; user_metadata?: { password_set?: boolean } } | null,
+): boolean => !!user && !user.is_anonymous && !!user.email && user.user_metadata?.password_set !== true
+
 /** "3 docs and 1 chat": what this browser keeps by saving its history, or loses by signing in to another account. */
 export function historySummary({ docs, chats }: { docs: number; chats: number }): string {
   const part = (n: number, word: string) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '')

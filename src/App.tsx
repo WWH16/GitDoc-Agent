@@ -3,7 +3,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AccountDialog, AccountMenu, useAccount, type AccountMode } from '@/components/account-dialog'
+import { AccountDialog, AccountMenu, useAccount, type AccountStart } from '@/components/account-dialog'
+import { linkError } from '@/lib/session'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
 import { ZoomableArticle } from '@/components/zoomable-article'
@@ -116,16 +117,33 @@ export default function App() {
   const [opened, setOpened] = useState<Generation | null>(null)
   // A run in progress keeps the Generate tab, so History cannot open other docs into it meanwhile
   const [running, setRunning] = useState(false)
-  const { user, saved } = useAccount()
+  const { user, saved, needsPassword, recovering } = useAccount()
   const accountDialog = useRef<HTMLDialogElement>(null)
-  const [accountMode, setAccountMode] = useState<AccountMode>('save')
+  const [accountStart, setAccountStart] = useState<AccountStart>({ mode: 'save', step: 'form' })
   const [accountOpens, setAccountOpens] = useState(0)
 
-  function openAccount(mode: AccountMode) {
-    setAccountMode(mode)
+  function openAccount(start: AccountStart) {
+    setAccountStart(start)
     setAccountOpens((n) => n + 1)
-    accountDialog.current?.showModal()
+    if (!accountDialog.current?.open) accountDialog.current?.showModal()
   }
+
+  // Save history picks up where it stands: a link already sent reopens on "Check your email"
+  const saveHistory = () => openAccount({ mode: 'save', step: user?.new_email ? 'sent' : 'form' })
+
+  // An email link brought the user back, or this tab saw the email confirmed elsewhere: carry on with the next step
+  useEffect(() => {
+    if (needsPassword) openAccount({ mode: 'save', step: 'password' })
+  }, [needsPassword])
+  useEffect(() => {
+    if (recovering) openAccount({ mode: 'signin', step: 'password', recovery: true })
+  }, [recovering])
+  useEffect(() => {
+    const message = linkError(location.href)
+    if (!message) return
+    history.replaceState(null, '', location.pathname)
+    openAccount({ mode: 'save', step: 'form', message })
+  }, [])
 
   const refresh = useCallback(async () => {
     try {
@@ -160,7 +178,7 @@ export default function App() {
               <TabsTrigger value="ask" className="sm:px-3">Ask</TabsTrigger>
               <TabsTrigger value="history" className="sm:px-3">History</TabsTrigger>
             </TabsList>
-            <AccountMenu user={user} saved={saved} onSave={() => openAccount('save')} />
+            <AccountMenu user={user} saved={saved} onOpen={openAccount} />
             <ThemeToggle />
           </div>
         </div>
@@ -177,7 +195,7 @@ export default function App() {
             onFinished={refresh}
             onRunningChange={setRunning}
             unsaved={!saved}
-            onSave={() => openAccount('save')}
+            onSave={saveHistory}
           />
         </TabsContent>
         <TabsContent value="ask" forceMount className="mx-auto w-full max-w-3xl data-[state=inactive]:hidden 2xl:max-w-4xl">
@@ -191,12 +209,12 @@ export default function App() {
             onOpen={open}
             running={running}
             unsaved={!saved}
-            onSave={() => openAccount('save')}
+            onSave={saveHistory}
             onGenerate={() => setTab('generate')}
           />
         </TabsContent>
       </main>
-      <AccountDialog dialog={accountDialog} mode={accountMode} setMode={setAccountMode} opens={accountOpens} />
+      <AccountDialog dialog={accountDialog} start={accountStart} opens={accountOpens} user={user} />
     </Tabs>
   )
 }
