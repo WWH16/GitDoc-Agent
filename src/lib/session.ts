@@ -22,3 +22,12 @@ export async function sessionToken(auth: Auth): Promise<string> {
     .finally(() => (signingIn = null))
   return signingIn
 }
+
+/** The error a Google sign-in brought back in the URL (Supabase puts it in the query or the hash), or null. */
+export function redirectError(url: string): { code: string; message: string } | null {
+  const u = new URL(url)
+  const hash = new URLSearchParams(u.hash.slice(1))
+  const get = (key: string) => u.searchParams.get(key) ?? hash.get(key)
+  const code = get('error_code') ?? get('error')
+  return code ? { code, message: get('error_description') ?? code } : null
+}
