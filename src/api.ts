@@ -36,13 +36,23 @@ export const currentStep = (doneNodes: Set<string>) =>
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
+// The session token every /api call carries. main.tsx sets the anonymous Supabase session; tests set their own.
+let tokenSource: () => Promise<string> = async () => ''
+export const setTokenSource = (source: () => Promise<string>) => {
+  tokenSource = source
+}
+const authHeader = async () => ({ Authorization: `Bearer ${await tokenSource()}` })
+
+const SIGNED_OUT = 'Sign-in expired. Reload the page.'
+
 /** POST JSON through the dev proxy. A non-2xx response throws body.error or body.message if present, otherwise "HTTP <status>". */
 async function post(path: string, body: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const headers = { 'Content-Type': 'application/json', ...(await authHeader()) }
   let r: Response
   try {
     r = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       signal,
     })
@@ -56,6 +66,7 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
   const error = isObject(data) && typeof data.error === 'string' ? data.error : ''
   // n8n's own failures (e.g. unregistered webhook) send { message } instead of { error }
   const message = isObject(data) && typeof data.message === 'string' ? data.message : ''
+  if (r.status === 401) throw new Error(SIGNED_OUT)
   if (!r.ok) throw new Error(error || message || `HTTP ${r.status}`)
   // n8n "Respond to Webhook" nodes answer 200 unless a response code is set, so an error body counts as an error too
   if (error) throw new Error(error)
@@ -98,7 +109,8 @@ export async function askRepo(
 
 /** n8n executions for this workflow; the proxy adds workflowId and the API key. Entries without an id are dropped. */
 async function executions(query: string): Promise<Execution[]> {
-  const r = await fetch(`/api/executions?${query}`)
+  const r = await fetch(`/api/executions?${query}`, { headers: await authHeader() })
+  if (r.status === 401) throw new Error(SIGNED_OUT)
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   const body: unknown = await r.json().catch(() => null)
   if (!isObject(body) || !Array.isArray(body.data)) throw new Error('Invalid response from n8n.')

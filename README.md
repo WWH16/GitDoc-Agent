@@ -9,6 +9,10 @@ Put this `web/` folder next to `doc_agent.py`. It reads the same `.env` from the
 ```
 N8N_WEBHOOK_TOKEN=...
 N8N_API_KEY=...
+# Supabase (anonymous accounts, private history): run docs/supabase-app.sql and turn on anonymous sign-ins first
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...   # server only, never VITE_
 # optional, defaults match doc_agent.py
 # N8N_URL=http://localhost:5678
 # N8N_WEBHOOK_PATH=/webhook/doc-agent

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, getProgress, latestFinishedId, showProgressHint, timeline } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, getProgress, latestFinishedId, setTokenSource, showProgressHint, timeline } from './api.ts'
 
 const reply = (status: number, body: unknown) => {
   globalThis.fetch = async () => new Response(JSON.stringify(body), { status })
@@ -132,4 +132,20 @@ test('latestFinishedId reads the newest listed execution, without execution data
   }
   assert.equal(await latestFinishedId(), 512)
   assert.ok(!url.includes('includeData'))
+})
+
+test('api calls carry the bearer token', async () => {
+  setTokenSource(async () => 'tok')
+  let auth = ''
+  globalThis.fetch = async (_u, init) => {
+    auth = new Headers(init?.headers).get('Authorization') ?? ''
+    return new Response('{"answer":"a","sources":[]}')
+  }
+  await askRepo('r', 'q', 's')
+  assert.equal(auth, 'Bearer tok')
+})
+
+test('401 maps to sign-in message', async () => {
+  reply(401, { error: 'whatever' })
+  await assert.rejects(askRepo('r', 'q', 's'), /^Error: Sign-in expired\. Reload the page\.$/)
 })
