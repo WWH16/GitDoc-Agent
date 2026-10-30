@@ -54,15 +54,15 @@
   - `docs_cache(repo text, tree_sha text, markdown text not null, preview text, created_at timestamptz not null default now(), primary key (repo, tree_sha))`, no policies (service role only; used by Task 7).
   - Function `public.rate_limit_hit(p_user uuid, p_ip text, p_kind text, p_rules jsonb) returns text`: `p_rules` is `[{"scope":"user"|"ip","limit":int,"window":"1 hour"}]`. Returns the first violated rule's `window` text, or `null` after inserting one `api_calls` row. Also deletes `api_calls` rows older than 1 day.
 
-- [ ] **Step 1: Write `docs/supabase-app.sql`**
+- [x] **Step 1: Write `docs/supabase-app.sql`**
 
 Policies for `generations` and `chats`: `select`, `insert`, `delete` (and `update` on `chats`, with both `using` and `with check`), each `to authenticated` with `(select auth.uid()) = user_id`. `grant select, insert, update, delete` on both tables `to authenticated` (new tables may not be exposed to the Data API by default). `rate_limit_hit`: `language plpgsql`, `set search_path = public`, `revoke execute … from public, anon, authenticated`, `grant execute … to service_role`.
 
-- [ ] **Step 2: User runs the file in the Supabase SQL Editor**
+- [x] **Step 2: User runs the file in the Supabase SQL Editor**
 
 Expected: "Success. No rows returned".
 
-- [ ] **Step 3: Verify RLS and the function**
+- [x] **Step 3: Verify RLS and the function**
 
 In the SQL Editor:
 ```sql
@@ -73,7 +73,7 @@ delete from public.api_calls where kind = 'test';
 ```
 Expected: all four `relrowsecurity = true`; the two calls return `null` then `1 hour`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/supabase-app.sql
@@ -92,7 +92,7 @@ git commit -m "feat(db): add private generations, chats and api rate-limit schem
 - `api.ts` gains `setTokenSource(fn: () => Promise<string>)` so tests can inject a token; every `/api/*` request sends `Authorization: Bearer <token>`.
 - A 401 response throws `Error('Sign-in expired. Reload the page.')`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 test('api calls carry the bearer token', async () => {
@@ -108,11 +108,11 @@ test('401 maps to sign-in message', async () => {
 })
 ```
 
-- [ ] **Step 2: Run `npm test`** — Expected: both FAIL.
-- [ ] **Step 3: Implement** `setTokenSource` and the header in `post` and in the progress fetch; `src/lib/supabase.ts` with `accessToken()` (uses `supabase.auth.getSession()`, then `signInAnonymously()` if null). Wire `setTokenSource(accessToken)` once in `src/main.tsx`.
-- [ ] **Step 4: Run `npm test` and `npx tsc -b`** — Expected: all PASS.
-- [ ] **Step 5: Manual check** — `npm run dev`, open `/app/`; Supabase dashboard → Authentication → Users shows one anonymous user; reloading does not create a second.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run `npm test`** — Expected: both FAIL.
+- [x] **Step 3: Implement** `setTokenSource` and the header in `post` and in the progress fetch; `src/lib/supabase.ts` with `accessToken()` (uses `supabase.auth.getSession()`, then `signInAnonymously()` if null). Wire `setTokenSource(accessToken)` once in `src/main.tsx`.
+- [x] **Step 4: Run `npm test` and `npx tsc -b`** — Expected: all PASS.
+- [x] **Step 5: Manual check** — `npm run dev`, open `/app/`; Supabase dashboard → Authentication → Users shows one anonymous user; reloading does not create a second.
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/supabase.ts src/api.ts src/api.test.ts src/main.tsx package.json package-lock.json README.md
@@ -130,7 +130,7 @@ git commit -m "feat(auth): sign visitors in anonymously and send their token to 
 - `guard(req: { path: string; ip: string; authorization: string | null }, deps: { verify(token: string): Promise<string | null>; hit(user: string, ip: string, kind: string, rules: Rule[]): Promise<string | null> }): Promise<{ status: number; body: { error: string }; retryAfter?: number } | { user: string }>` — pure decision function; `/api/generate` → kind `generate`, `/api/ask` → `ask`, `/api/progress` and `/api/executions` → `progress` (`/api/executions` stays only until Task 5 removes it); any other `/api/*` path → 404.
 - `guardPlugin(): Plugin` — Vite plugin; `configureServer` adds middleware on `/api` that builds real deps (`supabase.auth.getUser(token)` with the service-role client; `supabase.rpc('rate_limit_hit', …)`), returns the error response, or calls `next()` so the existing proxy forwards. IP from `x-forwarded-for` first value, else socket address. `Retry-After` seconds: `3600` for an hour window, `86400` for a day, `60` for a minute.
 
-- [ ] **Step 1: Write the failing tests** (`server/guard.test.ts`)
+- [x] **Step 1: Write the failing tests** (`server/guard.test.ts`)
 
 ```ts
 test('no token is 401', async () => assert.equal((await guard({ path: '/api/ask', ip: 'i', authorization: null }, deps())).status, 401))
@@ -149,11 +149,11 @@ test('unknown api path is 404', async () => assert.equal((await guard(req('/api/
 ```
 (`req(path)` builds `{ path, ip: '1.2.3.4', authorization: 'Bearer t' }`; `deps(over)` returns `verify: async () => 'u1'`, `hit: async () => null` merged with `over`.)
 
-- [ ] **Step 2: Run `npm test`** — Expected: FAIL (module missing).
-- [ ] **Step 3: Implement `server/guard.ts`** and register `guardPlugin()` in `vite.config.ts`; keep the existing proxy entries.
-- [ ] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
-- [ ] **Step 5: Manual check** — `curl -X POST localhost:5173/api/ask` → 401; the app still answers a question.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run `npm test`** — Expected: FAIL (module missing).
+- [x] **Step 3: Implement `server/guard.ts`** and register `guardPlugin()` in `vite.config.ts`; keep the existing proxy entries.
+- [x] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
+- [x] **Step 5: Manual check** — `curl -X POST localhost:5173/api/ask` → 401; the app still answers a question.
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/ vite.config.ts tsconfig.node.json package.json
@@ -172,7 +172,7 @@ git commit -m "feat(api): require a session and rate-limit generate, ask and pro
 - `callWorkflow(repo: string, runId: string)` sends `{ repo, runId }`; n8n needs no change (the Webhook node already exposes the body).
 - `getProgress(runId: string): Promise<Progress | null>` (404 → `null`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 test('progress returns only the matching run timeline', async () => {
@@ -183,11 +183,11 @@ test('unknown runId is 404', async () => assert.equal(await progressFor('nope', 
 ```
 (`exec(id, runId)` builds an execution whose `runData.Webhook[0].data.main[0][0].json.body.runId = runId`, plus a node with a file `content` field.)
 
-- [ ] **Step 2: Run `npm test`** — Expected: FAIL.
-- [ ] **Step 3: Implement**, deleting the single-user `ponytail:` assumption in `generate()` and the now-unused `latestFinishedId` test.
-- [ ] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
-- [ ] **Step 5: Manual check** — Generate on `https://github.com/WWH16/dss`: the node list moves live and ends on `Load Code into Supabase` with status Success; `curl localhost:5173/api/progress?runId=x -H "Authorization: Bearer <valid>"` → 404.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run `npm test`** — Expected: FAIL.
+- [x] **Step 3: Implement**, deleting the single-user `ponytail:` assumption in `generate()` and the now-unused `latestFinishedId` test.
+- [x] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
+- [x] **Step 5: Manual check** — Generate on `https://github.com/WWH16/dss`: the node list moves live and ends on `Load Code into Supabase` with status Success; `curl localhost:5173/api/progress?runId=x -H "Authorization: Bearer <valid>"` → 404.
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/progress.ts src/api.ts src/api.test.ts src/App.tsx server/
@@ -204,12 +204,12 @@ git commit -m "fix(api): show each user only their own run progress"
 - Produces: `type Generation = { id: string; repo: string; status: string; createdAt: string; markdown: string; preview: string }`; `saveGeneration(g: Omit<Generation, 'id' | 'createdAt'> & { executionId: string }): Promise<void>`; `listGenerations(): Promise<Generation[]>` (newest 20, select without `markdown`/`preview`); `loadGeneration(id: string): Promise<Generation>`.
 - History table columns: Repository, Status, Created, and an **Open** button (replaces the n8n executions table and the Duration column).
 
-- [ ] **Step 1: Implement `src/lib/history.ts`** with the Supabase client from Task 2 (RLS scopes rows to the user; no `user_id` filter in code).
-- [ ] **Step 2: Wire `Generate`**: after the run finishes (`done` or `partial`), call `saveGeneration`; on failure show `Couldn't save this run to your history.` under the form without losing the docs.
-- [ ] **Step 3: Wire `History`**: load on tab open and after each saved run; **Open** loads the markdown, renders it and switches to the Generate tab.
-- [ ] **Step 4: Run `npx tsc -b`, `npm test`** — Expected: PASS.
-- [ ] **Step 5: Manual check in two browsers** (normal and incognito = two anonymous users): generate in one; the other's Run history stays empty.
-- [ ] **Step 6: Commit**
+- [x] **Step 1: Implement `src/lib/history.ts`** with the Supabase client from Task 2 (RLS scopes rows to the user; no `user_id` filter in code).
+- [x] **Step 2: Wire `Generate`**: after the run finishes (`done` or `partial`), call `saveGeneration`; on failure show `Couldn't save this run to your history.` under the form without losing the docs.
+- [x] **Step 3: Wire `History`**: load on tab open and after each saved run; **Open** loads the markdown, renders it and switches to the Generate tab.
+- [x] **Step 4: Run `npx tsc -b`, `npm test`** — Expected: PASS.
+- [x] **Step 5: Manual check in two browsers** (normal and incognito = two anonymous users): generate in one; the other's Run history stays empty.
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/history.ts src/App.tsx src/api.ts server/guard.ts vite.config.ts
@@ -226,18 +226,18 @@ git commit -m "feat(history): keep each user's generated docs private and reopen
 - Produces: the `Message` type moves here from `src/App.tsx` (App imports it, so there is no import cycle); `loadChat(repo: string): Promise<{ sessionId: string; messages: Message[] } | null>`; `saveChat(repo: string, sessionId: string, messages: Message[]): Promise<void>` (upsert on `(user_id, repo)`); `deleteChat(repo: string): Promise<void>` (New chat).
 - Repo key: the URL normalized as in n8n (`trim`, lowercase, no `.git`, no trailing `/`), exported as `repoKey(url: string): string` and unit-tested.
 
-- [ ] **Step 1: Write the failing test** (`src/api.test.ts` or a new `src/chats.test.ts` importing only `repoKey`)
+- [x] **Step 1: Write the failing test** (`src/api.test.ts` or a new `src/chats.test.ts` importing only `repoKey`)
 
 ```ts
 test('repoKey normalizes like the workflows', () => {
   assert.equal(repoKey(' https://github.com/WWH16/DSS.git/ '), 'https://github.com/wwh16/dss')
 })
 ```
-- [ ] **Step 2: Run `npm test`** — Expected: FAIL.
-- [ ] **Step 3: Implement** `src/lib/chats.ts`; in `Ask`, load the chat when the repo key changes (debounced 400 ms so typing a URL does not load per keystroke), save after each answer, `deleteChat` on New chat.
-- [ ] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
-- [ ] **Step 5: Manual check** — chat on repo A, switch the URL to repo B (empty chat), switch back to A (chat returns); an incognito window sees neither.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run `npm test`** — Expected: FAIL.
+- [x] **Step 3: Implement** `src/lib/chats.ts`; in `Ask`, load the chat when the repo key changes (debounced 400 ms so typing a URL does not load per keystroke), save after each answer, `deleteChat` on New chat.
+- [x] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
+- [x] **Step 5: Manual check** — chat on repo A, switch the URL to repo B (empty chat), switch back to A (chat returns); an incognito window sees neither.
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/chats.ts src/App.tsx src/*.test.ts
@@ -255,7 +255,7 @@ git commit -m "feat(ask): keep a private chat per repository for each user"
 - `generate(body: { repo: string; runId: string; fresh?: boolean }, deps: { tree(repo: string): Promise<string | null>; cacheGet(repo: string, sha: string): Promise<{ markdown: string; preview: string } | null>; cachePut(repo: string, sha: string, doc: { markdown: string; preview: string }): Promise<void>; limit(): Promise<GuardError | null>; n8n(body: object): Promise<Response> }): Promise<{ status: number; body: object }>` — order: tree sha → cache hit (and not `fresh`) returns `{ markdown, preview, cached: true }` **without** consuming the generate limit → else `limit()` → n8n → on 200 with a `markdown` string, `cachePut` (errors ignored) → return n8n's body.
 - `callWorkflow(repo: string, runId: string, fresh = false): Promise<Result & { cached: boolean }>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 test('cache hit skips the limit and n8n', async () => {
@@ -275,11 +275,11 @@ test('no tree sha means no cache, normal run', async () => {
 ```
 (`gdeps(over)` defaults: `tree: async () => 'sha1'`, `cacheGet: async () => null`, `cachePut: async () => {}`, `limit: async () => null`, `n8n: async () => new Response('{"markdown":"m","preview":"p"}')`.)
 
-- [ ] **Step 2: Run `npm test`** — Expected: FAIL.
-- [ ] **Step 3: Implement**; the docs card shows `Loaded from cache` under the title for a cached result, and **Regenerate** runs with `fresh: true`.
-- [ ] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
-- [ ] **Step 5: Manual check** — Generate `WWH16/dss` twice: the second returns in about 1 s with `Loaded from cache` and no new n8n execution; **Regenerate** runs the workflow again.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run `npm test`** — Expected: FAIL.
+- [x] **Step 3: Implement**; the docs card shows `Loaded from cache` under the title for a cached result, and **Regenerate** runs with `fresh: true`.
+- [x] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
+- [x] **Step 5: Manual check** — Generate `WWH16/dss` twice: the second returns in about 1 s with `Loaded from cache` and no new n8n execution; **Regenerate** runs the workflow again.
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/ vite.config.ts src/api.ts src/App.tsx
@@ -296,7 +296,7 @@ git commit -m "feat(api): reuse docs for an unchanged repo instead of paying for
 - Produces: `accountState(user: { is_anonymous?: boolean; email?: string } | null): 'none' | 'anonymous' | 'saved'` (pure, unit-tested); `saveHistory(email: string): Promise<void>` = `supabase.auth.updateUser({ email }, { emailRedirectTo: location.origin + '/app/' })` (same user id, so every generation and chat is kept); `signInWithEmail(email: string): Promise<void>` = `supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: … } })` for another device; `signOut()`.
 - Header: anonymous → **Save your history**; saved → the email and **Sign out**. Dialog copy: title `Save your history`, body `We'll email you a sign-in link. Your docs and chats stay with your account on any device.`, button `Send link`, then `Check your email for the link.`; a second mode `Already saved? Sign in` with button `Send sign-in link`. Signing in on a browser that has its own anonymous history shows `This browser's unsaved history will be replaced.` before sending.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 test('accountState tells anonymous from saved users', () => {
@@ -305,11 +305,11 @@ test('accountState tells anonymous from saved users', () => {
   assert.equal(accountState({ is_anonymous: false, email: 'a@b.c' }), 'saved')
 })
 ```
-- [ ] **Step 2: Run `npm test`** — Expected: FAIL.
-- [ ] **Step 3: Implement** the helpers and dialog (native `<dialog>`, `<input type="email" required>`, existing `Button`); errors from Supabase show in the dialog in plain words.
-- [ ] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
-- [ ] **Step 5: Manual check** (needs user setup: Supabase → Authentication → URL Configuration → add `http://localhost:5173/app/` to Redirect URLs) — save with a real email, click the link: same history, header shows the email; open an incognito window, **Sign in** with that email: the same history appears.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run `npm test`** — Expected: FAIL.
+- [x] **Step 3: Implement** the helpers and dialog (native `<dialog>`, `<input type="email" required>`, existing `Button`); errors from Supabase show in the dialog in plain words.
+- [x] **Step 4: Run `npm test`, `npx tsc -b`** — Expected: PASS.
+- [x] **Step 5: Manual check** (needs user setup: Supabase → Authentication → URL Configuration → add `http://localhost:5173/app/` to Redirect URLs) — save with a real email, click the link: same history, header shows the email; open an incognito window, **Sign in** with that email: the same history appears. *(Done on the email + password flow that replaced the sign-in link: 120d412, 9e93c60.)*
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/account-dialog.tsx src/lib/supabase.ts src/App.tsx src/*.test.ts
