@@ -21,12 +21,13 @@ import {
   callWorkflow,
   currentStep,
   getProgress,
+  historySummary,
   repoKey,
   type Result,
   type Turn,
 } from './api'
 import { deleteChat, loadChat, saveChat, type Message } from './lib/chats'
-import { listGenerations, loadGeneration, saveGeneration, type Generation } from './lib/history'
+import { countHistory, listGenerations, loadGeneration, saveGeneration, type Generation } from './lib/history'
 import { showProgressHint, type NodeRun, type Progress as RunProgress } from './progress'
 
 // partial: docs came back, but the execution failed later (Ask indexing)
@@ -122,8 +123,17 @@ export default function App() {
   const [accountStart, setAccountStart] = useState<AccountStart>({ mode: 'save', step: 'form' })
   const [accountOpens, setAccountOpens] = useState(0)
 
-  function openAccount(start: AccountStart) {
-    setAccountStart(start)
+  async function openAccount(start: AccountStart) {
+    // Counted before the dialog opens, within 400 ms (still feels instant), so its first line never changes under
+    // the reader; a slower count is left out
+    const held =
+      start.step === 'form'
+        ? await Promise.race([
+            countHistory().then(historySummary, () => ''),
+            new Promise<string>((done) => setTimeout(() => done(''), 400)),
+          ])
+        : ''
+    setAccountStart({ ...start, held })
     setAccountOpens((n) => n + 1)
     if (!accountDialog.current?.open) accountDialog.current?.showModal()
   }
@@ -150,7 +160,7 @@ export default function App() {
       setGenerations(await listGenerations())
       setHistoryError('')
     } catch (e) {
-      setHistoryError(`Couldn't load your history: ${(e as Error).message}`)
+      setHistoryError(`Couldn’t load your history: ${(e as Error).message}`)
     }
   }, [])
 
@@ -380,7 +390,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
     // The docs stay on screen either way; only the history entry is missing if this fails
     await saveGeneration({ repo: url, status, markdown: res.markdown, preview: res.preview, executionId: p?.id ?? '' }).then(
       onFinished,
-      () => setSaveError("Couldn't save this run to your history."),
+      () => setSaveError('Couldn’t save this run to your history.'),
     )
   }
 
@@ -465,7 +475,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
         {finished && unsaved && !saveError && (
           <p className="text-sm text-muted-foreground">
             Kept in this browser only.{' '}
-            <button type="button" onClick={onSave} className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50">
+            <button type="button" onClick={onSave} className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 active:opacity-70">
               Save history
             </button>{' '}
             to open these docs on any device.
@@ -568,6 +578,9 @@ const toTurn = (m: Message): Turn =>
     ? { role: 'user', text: m.text }
     : { role: 'assistant', text: m.text ?? new DOMParser().parseFromString(m.html, 'text/html').body.textContent ?? '' }
 
+// How long New chat can be undone before the old chat is deleted for good
+const UNDO_MS = 8000
+
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
 // A question that got no answer: kept so it can be asked again without retyping
@@ -595,6 +608,8 @@ function Ask({ repo, setRepo }: RepoProps) {
   const [now, setNow] = useState(() => Date.now())
   const [failed, setFailed] = useState<Failure | null>(null)
   const [saveError, setSaveError] = useState('')
+  // New chat clears the screen at once; the saved chat is deleted only when the undo window closes
+  const [cleared, setCleared] = useState<{ key: string; sessionId: string; messages: Message[] } | null>(null)
   const abort = useRef<AbortController | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const refocus = useRef(false)
@@ -621,6 +636,18 @@ function Ask({ repo, setRepo }: RepoProps) {
       clearTimeout(id)
     }
   }, [key])
+
+  // Delete the cleared chat when the undo window closes, or at once if the repo changes first
+  useEffect(() => {
+    if (!cleared) return
+    const remove = () => {
+      setCleared(null)
+      deleteChat(cleared.key).catch(() => setSaveError('Couldn’t delete the old chat. It may come back after a reload.'))
+    }
+    if (cleared.key !== key) return remove()
+    const id = setTimeout(remove, UNDO_MS)
+    return () => clearTimeout(id)
+  }, [cleared, key])
 
   // Tick once a second while waiting, for the elapsed time and wait message
   useEffect(() => {
@@ -650,6 +677,8 @@ function Ask({ repo, setRepo }: RepoProps) {
       setQuestion('')
     }
     setFailed(null)
+    // Asking in a just-cleared chat saves over the old one, so nothing is left to delete or undo
+    setCleared(null)
     setNow(Date.now())
     setStartedAt(Date.now())
     // On phones only keep focus where the person was typing, so the keyboard doesn't pop up after a tap
@@ -665,7 +694,7 @@ function Ask({ repo, setRepo }: RepoProps) {
       // A failed save (e.g. a chat over the 1 MB limit) leaves the chat on screen but not after a reload, so say so
       saveChat(key, sessionId, chat).then(
         () => setSaveError(''),
-        () => setSaveError("Couldn't save this chat. Its newest messages will be gone after a reload."),
+        () => setSaveError('Couldn’t save this chat. Its newest messages will be gone after a reload.'),
       )
     } catch (e) {
       const cancelled = ctrl.signal.aborted
@@ -677,18 +706,19 @@ function Ask({ repo, setRepo }: RepoProps) {
     }
   }
 
-  async function newChat() {
-    // Only clear the screen once the saved chat is gone, or it would come back on the next visit
-    try {
-      await deleteChat(key)
-    } catch {
-      setSaveError("Couldn't start a new chat. Try again.")
-      return
-    }
+  function newChat() {
+    setCleared({ key, sessionId, messages })
     setSaveError('')
     setMessages([])
     setFailed(null)
     setSessionId(crypto.randomUUID())
+  }
+
+  function undoNewChat() {
+    if (!cleared) return
+    setMessages(cleared.messages)
+    setSessionId(cleared.sessionId)
+    setCleared(null)
   }
 
   const empty = messages.length === 0
@@ -742,11 +772,21 @@ function Ask({ repo, setRepo }: RepoProps) {
           </label>
           <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
         </div>
-        {/* Disabled while waiting, so a late answer never lands in the new chat */}
-        <Button variant="ghost" size="sm" onClick={newChat} disabled={pending || !ready || messages.length === 0} className="ml-auto">
-          <SquarePen />
-          New chat
-        </Button>
+        {cleared?.key === key ? (
+          <p role="status" className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+            Chat cleared.
+            {/* Takes the focus New chat had, so the keyboard lands on it */}
+            <Button variant="outline" size="sm" onClick={undoNewChat} autoFocus>
+              Undo
+            </Button>
+          </p>
+        ) : (
+          // Disabled while waiting, so a late answer never lands in the new chat
+          <Button variant="ghost" size="sm" onClick={newChat} disabled={pending || !ready || messages.length === 0} className="ml-auto">
+            <SquarePen />
+            New chat
+          </Button>
+        )}
       </div>
 
       {empty ? (

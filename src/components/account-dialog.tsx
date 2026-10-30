@@ -1,11 +1,10 @@
 import type { User } from '@supabase/supabase-js'
-import { CircleCheck, CloudUpload, Eye, EyeOff, KeyRound, Loader2, LogOut, MailCheck } from 'lucide-react'
+import { CircleCheck, CloudUpload, Eye, EyeOff, KeyRound, Loader2, LogOut, MailCheck, TriangleAlert } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { useEffect, useRef, useState, type ComponentProps, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { countHistory } from '@/lib/history'
 import {
   refreshAccount,
   resendConfirmation,
@@ -16,13 +15,20 @@ import {
   signOut,
   supabase,
 } from '@/lib/supabase'
-import { accountState, historySummary, needsPassword } from '../api'
+import { accountState, needsPassword } from '../api'
 
 export type AccountMode = 'save' | 'signin'
 // form → sent (check your email) → password → done; Sign in: form → reset-sent when the password was forgotten
 export type AccountStep = 'form' | 'sent' | 'password' | 'reset-sent' | 'done'
 /** Where the dialog opens: `message` shows as an error (a link that failed); `recovery` means a password reset. */
-export type AccountStart = { mode: AccountMode; step: AccountStep; message?: string; recovery?: boolean }
+export type AccountStart = {
+  mode: AccountMode
+  step: AccountStep
+  message?: string
+  recovery?: boolean
+  /** "3 docs and 2 chats" this browser holds, counted before the dialog opens; empty when none or not counted */
+  held?: string
+}
 
 /** The signed-in user, kept current. While a confirmation email is pending, coming back to the tab rechecks the user,
  *  so a link opened on another tab or device moves this tab on to the password step. */
@@ -136,8 +142,6 @@ export function AccountDialog({
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // "3 docs and 2 chats" in this browser; empty when there are none or they could not be counted
-  const [held, setHeld] = useState('')
   // Seconds until another confirmation email may be sent (Supabase allows one a minute)
   const [cooldown, setCooldown] = useState(0)
   const emailInput = useRef<HTMLInputElement>(null)
@@ -152,10 +156,8 @@ export function AccountDialog({
     setStep(start.step)
     setRecovery(!!start.recovery)
     setError(start.message ?? '')
-    countHistory()
-      .then((c) => setHeld(historySummary(c)))
-      .catch(() => setHeld(''))
   }, [opens, start])
+  const held = start.held ?? ''
 
   // The field the step asks for gets the cursor
   useEffect(() => {
@@ -230,16 +232,16 @@ export function AccountDialog({
       ref={dialog}
       onClose={reset}
       aria-labelledby="account-title"
-      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-2xl border bg-card p-6 text-card-foreground shadow-lg backdrop:bg-black/50"
+      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-2xl border bg-card p-6 text-card-foreground shadow-lg backdrop:bg-scrim"
     >
       {step === 'sent' && (
-        <Panel icon={<MailCheck className="size-8 text-primary" aria-hidden />} stage="Step 1 of 2" title="Check your email">
+        <Panel icon={<MailCheck className="size-8 text-primary" aria-hidden />} title="Check your email">
           <p>
             We sent a link to <Strong>{address}</Strong>. Open it to confirm your email, then choose a password. Your docs and
             chats stay here while you wait.
           </p>
           <p>
-            Didn't get it? Check your spam folder, or{' '}
+            Didn’t get it? Check your spam folder, or{' '}
             <LinkButton disabled={busy || cooldown > 0} onClick={() => run(() => resendConfirmation(address).then(() => setCooldown(60)))}>
               {cooldown > 0 ? `resend in ${cooldown} s` : 'resend the link'}
             </LinkButton>
@@ -300,7 +302,6 @@ export function AccountDialog({
           )}
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1">
-              {step === 'password' && !recovery && <p className="text-xs font-medium text-muted-foreground">Step 2 of 2</p>}
               <h2 id="account-title" className="text-lg font-semibold tracking-tight">
                 {step === 'password' ? (recovery ? 'Choose a new password' : 'Email confirmed') : save ? 'Save your history' : 'Sign in to your history'}
               </h2>
@@ -310,14 +311,15 @@ export function AccountDialog({
                     ? `Use it with ${address} from now on.`
                     : `Last step: choose a password to sign in with ${address} on any device.`
                   : save
-                    ? `${held ? `Keep your ${held} on any device. ` : ''}Enter your email and we'll send a link to confirm it's yours.`
+                    ? `${held ? `Keep your ${held} on any device. ` : ''}Enter your email and we’ll send a link to confirm it’s yours.`
                     : 'Use the email and password you saved your history with.'}
               </p>
             </div>
 
             {step === 'form' && !save && held && (
-              <p className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-                This browser has {held} that aren't saved. Signing in replaces them with your account's history.
+              <p className="flex gap-2 text-sm text-warning">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                Unsaved in this browser: {held}. Signing in replaces this browser’s history with your account’s.
               </p>
             )}
 
@@ -366,7 +368,7 @@ export function AccountDialog({
                     type="button"
                     onClick={() => setShowPassword((s) => !s)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 active:opacity-70"
                   >
                     {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
@@ -386,7 +388,7 @@ export function AccountDialog({
                 {step === 'password' ? 'Later' : 'Cancel'}
               </Button>
               <Button type="submit" disabled={busy}>
-                {busy && <Loader2 className="animate-spin" />}
+                {busy && <Loader2 className="motion-safe:animate-spin" />}
                 {step === 'password' ? 'Save password' : save ? 'Send link' : 'Sign in'}
               </Button>
             </Actions>
@@ -397,16 +399,13 @@ export function AccountDialog({
   )
 }
 
-function Panel({ icon, stage, title, children }: { icon: ReactNode; stage?: string; title: string; children: ReactNode }) {
+function Panel({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
     <div className="space-y-4" role="status">
       {icon}
-      <div className="space-y-1">
-        {stage && <p className="text-xs font-medium text-muted-foreground">{stage}</p>}
-        <h2 id="account-title" className="text-lg font-semibold tracking-tight">
-          {title}
-        </h2>
-      </div>
+      <h2 id="account-title" className="text-lg font-semibold tracking-tight">
+        {title}
+      </h2>
       <div className="space-y-3 text-sm text-muted-foreground">{children}</div>
     </div>
   )
@@ -441,7 +440,7 @@ function LinkButton({ children, ...props }: ComponentProps<'button'>) {
     <button
       type="button"
       {...props}
-      className="rounded-sm text-sm font-medium text-foreground underline underline-offset-4 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:text-muted-foreground disabled:no-underline"
+      className="rounded-sm text-sm font-medium text-foreground underline underline-offset-4 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 active:opacity-70 disabled:text-muted-foreground disabled:no-underline"
     >
       {children}
     </button>

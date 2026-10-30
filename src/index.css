@@ -32,6 +32,8 @@
   --warning: oklch(0.52 0.12 65);
   /* Commit Orange (#FF5A36) from the logo: graphics only, never text on white (3.1:1) */
   --brand: oklch(0.684 0.207 33.86);
+  /* behind a dialog: the ink at half strength */
+  --scrim: oklch(0.145 0 0 / 50%);
 }
 
 .dark {
@@ -55,6 +57,7 @@
   --ring: oklch(0.556 0 0);
   --success: oklch(0.72 0.15 150);
   --warning: oklch(0.78 0.14 75);
+  --scrim: oklch(0.145 0 0 / 70%);
 }
 
 @theme inline {
@@ -84,6 +87,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-brand: var(--brand);
+  --color-scrim: var(--scrim);
 }
 
 @layer base {
