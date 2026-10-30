@@ -126,9 +126,9 @@
   --code-number: oklch(0.5 0.12 65);
   --code-title: oklch(0.47 0.13 250);
   --code-attr: oklch(0.48 0.1 200);
-  /* Inline code: a dark chip in both themes */
-  --code-chip: oklch(0.24 0.012 250);
-  --code-chip-ink: oklch(0.96 0 0);
+  /* Inline code: a soft chip on light paper, a dark one in dark mode */
+  --code-chip: oklch(0.94 0.006 250);
+  --code-chip-ink: oklch(0.3 0.02 250);
 }
 .dark {
   --code-keyword: oklch(0.76 0.14 35);
@@ -137,6 +137,7 @@
   --code-title: oklch(0.78 0.11 250);
   --code-attr: oklch(0.79 0.09 200);
   --code-chip: oklch(0.32 0.012 250);
+  --code-chip-ink: oklch(0.96 0 0);
 }
 
 /* Unlayered, so these beat the typography plugin's pre and table styles */
