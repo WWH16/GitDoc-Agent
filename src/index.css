@@ -110,3 +110,10 @@
     background: color-mix(in oklch, var(--brand) 25%, transparent);
   }
 }
+
+/* Theme switch (ThemeToggle): the new theme grows as a circle from the toggle, so turn off the default crossfade */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
