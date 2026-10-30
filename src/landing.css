@@ -116,7 +116,7 @@
     border-radius: 1rem;
     background: var(--muted);
   }
-  .shot > img {
+  .shot img {
     display: block;
     width: 100%;
     height: auto;

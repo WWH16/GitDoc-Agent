@@ -20,25 +20,13 @@ const QUICK = 'duration-200 ease-out-quart motion-reduce:transition-none'
 // The page has no theme toggle: the saved theme is applied before first paint (index.html), so read it once
 const DARK = document.documentElement.classList.contains('dark')
 
-const phoneQuery = matchMedia('(max-width: 40rem)')
-function usePhone() {
-  return useSyncExternalStore(
-    (onChange) => {
-      phoneQuery.addEventListener('change', onChange)
-      return () => phoneQuery.removeEventListener('change', onChange)
-    },
-    () => phoneQuery.matches,
-  )
-}
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)')
 
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
-function useReducedMotion() {
+// A media query's live answer: resizing or switching the OS setting re-renders at once
+function useMedia(m: MediaQueryList) {
   return useSyncExternalStore(
-    (onChange) => {
-      reducedMotion.addEventListener('change', onChange)
-      return () => reducedMotion.removeEventListener('change', onChange)
-    },
-    () => reducedMotion.matches,
+    (onChange) => (m.addEventListener('change', onChange), () => m.removeEventListener('change', onChange)),
+    () => m.matches,
   )
 }
 
@@ -106,9 +94,12 @@ function Header() {
 
 // Pixel sizes of the 2x captures in public/landing: a 1440 x 900 screen, a 390 x 844 phone
 const SCREEN = [2880, 1800] as const
-const PHONE = [780, 1688] as const
+const PHONE_SIZE = [780, 1688] as const
 
-/** A whole screenshot of the running app, never cropped or zoomed. Below 40rem the `phone` capture takes its place. */
+const src = (file: string) => `/landing/${file}-${DARK ? 'dark' : 'light'}.webp`
+
+/** A whole screenshot of the running app, never cropped or zoomed. Below 40rem the browser swaps in the `phone`
+ *  capture itself (<picture>), live as the window resizes. */
 function Shot({
   name,
   alt,
@@ -124,21 +115,20 @@ function Shot({
   priority?: boolean
   className?: string
 }) {
-  const small = usePhone()
-  const file = small && phone ? phone : name
-  const [width, height] = small && phone ? PHONE : size
   return (
-    <figure className={cn('shot', className)} data-slot={name}>
-      <img
-        key={file}
-        src={`/landing/${file}-${DARK ? 'dark' : 'light'}.webp`}
-        alt={alt}
-        width={width}
-        height={height}
-        loading={priority ? 'eager' : 'lazy'}
-        fetchPriority={priority ? 'high' : 'auto'}
-        decoding="async"
-      />
+    <figure className={cn('shot', className)}>
+      <picture>
+        {phone && <source media="(max-width: 40rem)" srcSet={src(phone)} width={PHONE_SIZE[0]} height={PHONE_SIZE[1]} />}
+        <img
+          src={src(name)}
+          alt={alt}
+          width={size[0]}
+          height={size[1]}
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
+          decoding="async"
+        />
+      </picture>
     </figure>
   )
 }
@@ -209,7 +199,7 @@ const FOLLOW_MS = 120
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 function HowItWorks() {
-  const reduced = useReducedMotion()
+  const reduced = useMedia(REDUCED_MOTION)
   const graph = useRef<HTMLDivElement>(null)
   const fills = useRef<(HTMLSpanElement | null)[]>([])
   const [progress, setProgress] = useState(0)
@@ -483,11 +473,7 @@ const RUN_STEPS: { title: string; note: ReactNode; code: string }[] = [
   },
   {
     title: 'Set up Supabase',
-    note: (
-      <>
-        Run both files in the SQL Editor, then turn on anonymous sign-ins under Authentication.
-      </>
-    ),
+    note: 'Run both files in the SQL Editor, then turn on anonymous sign-ins under Authentication.',
     code: 'docs/supabase-setup.sql\ndocs/supabase-app.sql',
   },
   {
