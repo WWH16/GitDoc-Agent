@@ -8,18 +8,7 @@ export type Answer = { answer: string; sources: string[] }
 
 export type Run = { id: string; status: string; started: string; finished: string }
 
-type TaskData = { startTime: number; executionTime?: number; error?: { message?: string } }
-
-type Execution = {
-  id: string
-  status?: string
-  startedAt?: string
-  stoppedAt?: string
-  data?: {
-    resultData?: { runData?: Record<string, TaskData[]> }
-    executionData?: { nodeExecutionStack?: { node?: { name?: string } }[] }
-  }
-}
+import type { Execution, Progress } from './progress.ts'
 
 // (label, n8n node whose completion starts the step)
 export const STEPS: [string, string | null][] = [
@@ -74,8 +63,9 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
   return data
 }
 
-export async function callWorkflow(repo: string): Promise<Result> {
-  const data = await post('/api/generate', { repo })
+/** `runId` is a random id the browser makes; only it can later read this run's progress. */
+export async function callWorkflow(repo: string, runId: string): Promise<Result> {
+  const data = await post('/api/generate', { repo, runId })
   if (typeof data.markdown !== 'string') throw new Error('The workflow returned no documentation.')
   // Without a preview, fall back to the raw markdown (diagrams stay as code blocks)
   return { markdown: data.markdown, preview: typeof data.preview === 'string' ? data.preview : data.markdown }
@@ -127,12 +117,6 @@ function localTime(stamp: unknown) {
   return s && !isNaN(+d) ? d.toLocaleString('sv-SE') : ''
 }
 
-/** Id of the newest finished execution, or 0. n8n's list leaves running executions out, so a run counts as finished
- *  once its id shows up here. Light: no execution data. */
-export async function latestFinishedId(): Promise<number> {
-  return Number((await executions('limit=1'))[0]?.id ?? 0)
-}
-
 export async function getHistory(): Promise<Run[]> {
   return (await executions('limit=20')).map((e) => ({
     id: e.id,
@@ -142,42 +126,12 @@ export async function getHistory(): Promise<Run[]> {
   }))
 }
 
-export type NodeRun = { name: string; status: 'done' | 'running' | 'error'; runs: number; ms: number }
-
-/** n8n runData as one row per node in start order. A loop node has one row, with its runs counted and times summed.
- *  `running` is the node at the head of nodeExecutionStack. It is marked running even if it already ran (next loop pass). */
-export function timeline(runData: Record<string, TaskData[]>, running: string | null): NodeRun[] {
-  const rows = Object.entries(runData)
-    .sort(([, a], [, b]) => a[0].startTime - b[0].startTime)
-    .map(([name, tasks]): NodeRun => ({
-      name,
-      status: name === running ? 'running' : tasks.some((t) => t.error) ? 'error' : 'done',
-      runs: tasks.length,
-      ms: tasks.reduce((sum, t) => sum + (t.executionTime ?? 0), 0),
-    }))
-  if (running && !(running in runData)) rows.push({ name: running, status: 'running', runs: 0, ms: 0 })
-  return rows
-}
-
-// No finished node after 10 s means n8n is not saving execution progress (workflow setting is off)
-export const showProgressHint = (elapsed: number, nodes: NodeRun[]) =>
-  elapsed >= 10 && !nodes.some((n) => n.status !== 'running')
-
-/** `error` is the first failed node as "Node: message", empty when none failed. */
-export type Progress = { id: string; status: string; error: string; nodes: NodeRun[] }
-
-/** Latest execution that matches `query`, as a node timeline. Default: the running one.
- *  n8n only fills runData during a run when the workflow's "Save execution progress" setting is on. */
-export async function getProgress(query = 'status=running'): Promise<Progress | null> {
-  const run = (await executions(`${query}&limit=1&includeData=true`))[0]
-  if (!run) return null
-  const raw = run.data?.resultData?.runData
-  // Keep only nodes with at least one task so timeline() can read tasks[0]
-  const runData: Record<string, TaskData[]> = isObject(raw)
-    ? Object.fromEntries(Object.entries(raw).filter(([, t]) => Array.isArray(t) && t.length > 0 && isObject(t[0])))
-    : {}
-  const head = run.status === 'running' ? run.data?.executionData?.nodeExecutionStack?.[0]?.node?.name : undefined
-  const failed = Object.entries(runData).find(([, tasks]) => tasks.some((t) => t.error))
-  const error = failed ? `${failed[0]}: ${failed[1].find((t) => t.error)?.error?.message ?? 'failed'}` : ''
-  return { id: run.id, status: str(run.status), error, nodes: timeline(runData, typeof head === 'string' ? head : null) }
+/** The timeline of the run this browser started with `runId`, or null while the server cannot find it yet.
+ *  The server builds it from n8n, so no execution data (repository files) reaches the browser. */
+export async function getProgress(runId: string): Promise<Progress | null> {
+  const r = await fetch(`/api/progress?runId=${encodeURIComponent(runId)}`, { headers: await authHeader() })
+  if (r.status === 401) throw new Error(SIGNED_OUT)
+  if (r.status === 404) return null
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return (await r.json()) as Progress
 }

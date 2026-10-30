@@ -20,14 +20,11 @@ import {
   currentStep,
   getHistory,
   getProgress,
-  latestFinishedId,
-  showProgressHint,
-  type NodeRun,
-  type Progress as RunProgress,
   type Result,
   type Run,
   type Turn,
 } from './api'
+import { showProgressHint, type NodeRun, type Progress as RunProgress } from './progress'
 
 // partial: docs came back, but the execution failed later (Ask indexing)
 type Phase = 'idle' | 'running' | 'done' | 'partial' | 'error'
@@ -208,6 +205,9 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     if ((phase === 'done' || phase === 'partial') && result) save(SAVED_RUN, { phase, nodes, runId, elapsed, result, html, error })
   }, [phase, nodes, runId, elapsed, result, html, error])
 
+  // The id this browser gave its current run (not n8n's execution id, which `runId` shows)
+  const myRun = useRef('')
+
   function applyProgress(p: RunProgress | null) {
     if (!p) return
     setRunId(p.id)
@@ -233,7 +233,7 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
       setElapsed(s)
       if (s % 3 === 0 && !polling) {
         polling = true
-        getProgress()
+        getProgress(myRun.current)
           .then(applyProgress)
           .catch(() => {})
           .finally(() => (polling = false))
@@ -257,26 +257,26 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     setElapsed(0)
     setError('')
     setResult(null)
-    // n8n's execution list leaves running runs out, so note the newest finished one first: ours has finished once a
-    // newer id appears there.
-    // ponytail: assumes the newest execution is ours (single local user); match on runId if several people share n8n
-    const before = await latestFinishedId().catch(() => 0)
-    const finishedRun = async () =>
-      (await latestFinishedId().catch(() => 0)) > before ? getProgress('').catch(() => null) : null
+    // A random id for this run: the server finds our execution by it, and nobody else knows it
+    const run = (myRun.current = crypto.randomUUID())
     try {
-      const res = await callWorkflow(url)
+      const res = await callWorkflow(url, run)
       setHtml(await renderMarkdown(res.preview))
       setResult(res)
     } catch (e) {
       setError((e as Error).message)
       setPhase('error')
-      // The run may end between polls: read our finished run once so the list ends on the final node.
-      finishedRun().then(applyProgress)
+      // The run may end between polls: read it once more so the list ends on the final node.
+      getProgress(run).then(applyProgress).catch(() => {})
       return
     }
     // "Return Documentation" answers before the last node runs, so wait for the execution to end.
     let p: RunProgress | null = null
-    for (let i = 0; i < 100 && !(p = await finishedRun()); i++) await new Promise((r) => setTimeout(r, 3000))
+    for (let i = 0; i < 100; i++) {
+      p = await getProgress(run).catch(() => null)
+      if (p && p.status !== 'running') break
+      await new Promise((r) => setTimeout(r, 3000))
+    }
     applyProgress(p)
     if (p && FAILED.has(p.status)) {
       setError(p.error || `n8n marked execution #${p.id} as ${p.status}.`)

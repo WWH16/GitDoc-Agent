@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     // guardPlugin checks the session and rate limits before the proxy below forwards /api calls
-    plugins: [react(), tailwindcss(), guardPlugin(env)],
+    plugins: [react(), tailwindcss(), guardPlugin({ ...env, N8N_URL: n8n, N8N_WORKFLOW_ID: workflowId })],
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     // Two pages: the landing page at / and the app at /app/
     build: {

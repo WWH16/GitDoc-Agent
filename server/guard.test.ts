@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { guard, type Deps, type GuardError, type Rule } from './guard.ts'
+import type { Execution } from '../src/progress.ts'
+import { guard, progressFor, type Deps, type GuardError, type Rule } from './guard.ts'
 
 const req = (path: string) => ({ path, ip: '1.2.3.4', authorization: 'Bearer t' })
 const deps = (over: Partial<Deps> = {}): Deps => ({ verify: async () => 'u1', hit: async () => null, ...over })
@@ -32,3 +33,21 @@ test('limiter error is 503', async () => {
 })
 
 test('unknown api path is 404', async () => assert.equal(await status(guard(req('/api/other'), deps())), 404))
+
+// An execution started by run `runId`, with a node that carries file contents (which must never reach the browser)
+const exec = (id: string, runId: string): Execution => ({
+  id,
+  status: 'success',
+  data: { resultData: { runData: {
+    Webhook: [{ startTime: 1, executionTime: 1, data: { main: [[{ json: { body: { repo: 'r', runId } } }]] } }],
+    'Get File Contents': [{ startTime: 2, executionTime: 5, data: { main: [[{ json: { content: 'secret file' } }]] } }],
+  } } },
+})
+
+test('progress returns only the matching run timeline', async () => {
+  const p = await progressFor('r1', async () => [exec('7', 'r2'), exec('8', 'r1')])
+  assert.equal(p?.id, '8')
+  assert.ok(!JSON.stringify(p).includes('content'))
+})
+
+test('unknown runId is 404', async () => assert.equal(await progressFor('nope', async () => [exec('7', 'r2')]), null))

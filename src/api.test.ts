@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, getProgress, latestFinishedId, setTokenSource, showProgressHint, timeline } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, setTokenSource } from './api.ts'
+import { showProgressHint, timeline, toProgress } from './progress.ts'
 
 const reply = (status: number, body: unknown) => {
   globalThis.fetch = async () => new Response(JSON.stringify(body), { status })
@@ -56,7 +57,7 @@ test('non-2xx shows body.error, else HTTP <status>', async () => {
   reply(404, { code: 404, message: 'webhook not registered' })
   await assert.rejects(askRepo('r', 'q', 's'), /^Error: webhook not registered$/)
   reply(500, 'oops')
-  await assert.rejects(callWorkflow('r'), /^Error: HTTP 500$/)
+  await assert.rejects(callWorkflow('r', 'run1'), /^Error: HTTP 500$/)
 })
 
 test('askRepo keeps only string sources', async () => {
@@ -68,9 +69,9 @@ test('askRepo keeps only string sources', async () => {
 
 test('callWorkflow requires markdown and falls back to it for preview', async () => {
   reply(200, { markdown: '# Doc' })
-  assert.deepEqual(await callWorkflow('r'), { markdown: '# Doc', preview: '# Doc' })
+  assert.deepEqual(await callWorkflow('r', 'run1'), { markdown: '# Doc', preview: '# Doc' })
   reply(200, { preview: 'x' })
-  await assert.rejects(callWorkflow('r'))
+  await assert.rejects(callWorkflow('r', 'run1'))
 })
 
 test('getHistory drops entries without an id and blanks bad dates', async () => {
@@ -90,18 +91,15 @@ test('200 with an error body is treated as an error', async () => {
   await assert.rejects(askRepo('r', 'q', 's'), /^Error: blocked$/)
 })
 
-test('getProgress reports final status and the first failed node', async () => {
-  reply(200, {
-    data: [{
-      id: 448,
-      status: 'error',
-      data: { resultData: { runData: {
-        'Return Documentation': [{ startTime: 1, executionTime: 1 }],
-        'Supabase Vector Store': [{ startTime: 2, executionTime: 1, error: { message: 'fetch failed' } }],
-      } } },
-    }],
+test('toProgress reports final status and the first failed node', () => {
+  const p = toProgress({
+    id: '448',
+    status: 'error',
+    data: { resultData: { runData: {
+      'Return Documentation': [{ startTime: 1, executionTime: 1 }],
+      'Supabase Vector Store': [{ startTime: 2, executionTime: 1, error: { message: 'fetch failed' } }],
+    } } },
   })
-  const p = await getProgress('')
   assert.equal(p?.status, 'error')
   assert.equal(p?.error, 'Supabase Vector Store: fetch failed')
 })
@@ -122,16 +120,6 @@ test('a cancelled ask rejects with AbortError, not the "No response" message', a
   const c = new AbortController()
   c.abort()
   await assert.rejects(askRepo('r', 'q', 's', [], c.signal), { name: 'AbortError' })
-})
-
-test('latestFinishedId reads the newest listed execution, without execution data', async () => {
-  let url = ''
-  globalThis.fetch = async (u) => {
-    url = String(u)
-    return new Response(JSON.stringify({ data: [{ id: 512, status: 'success' }] }))
-  }
-  assert.equal(await latestFinishedId(), 512)
-  assert.ok(!url.includes('includeData'))
 })
 
 test('api calls carry the bearer token', async () => {
