@@ -2,10 +2,6 @@
 
 export const URL_PLACEHOLDER = 'https://github.com/<username>/<repo-name>'
 
-/** No session yet, the anonymous account this browser got, or an account saved with an email (usable on any device). */
-export const accountState = (user: { is_anonymous?: boolean; email?: string } | null): 'none' | 'anonymous' | 'saved' =>
-  !user ? 'none' : user.is_anonymous ? 'anonymous' : 'saved'
-
 /** A confirmed email but no password yet: the last step of saving the history (Supabase allows a password only once
  *  the email is confirmed). `password_set` is written to the user's metadata when the password is chosen. */
 export const needsPassword = (

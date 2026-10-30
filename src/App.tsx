@@ -92,25 +92,15 @@ function save(key: string, value: unknown) {
   } catch {}
 }
 
-function useSavedState<T>(key: string, initial: () => T) {
-  const [value, setValue] = useState<T>(() => load<T>(key) ?? initial())
-  useEffect(() => save(key, value), [key, value])
-  return [value, setValue] as const
-}
-
 type RepoProps = { repo: string; setRepo: (v: string) => void }
 
 // The landing page's form links here as /app/?repo=<url>; that beats the saved repo
 const LANDING_REPO = new URLSearchParams(location.search).get('repo')
 if (LANDING_REPO) save('gitdoc:repo', LANDING_REPO)
-// Docs used to be kept in this browser (up to a few MB); they live in History now
-save('gitdoc:last-run', null)
-// Ask chats used to be kept here too; each repository has its own saved chat now
-save('gitdoc:ask-messages', null)
-save('gitdoc:ask-session', null)
 
 export default function App() {
-  const [repo, setRepo] = useSavedState('gitdoc:repo', () => '')
+  const [repo, setRepo] = useState(() => load<string>('gitdoc:repo') ?? '')
+  useEffect(() => save('gitdoc:repo', repo), [repo])
   const [tab, setTab] = useState('generate')
   const [generations, setGenerations] = useState<Generation[] | null>(null)
   const [historyError, setHistoryError] = useState('')
@@ -121,7 +111,6 @@ export default function App() {
   const { user, saved, needsPassword, recovering } = useAccount()
   const accountDialog = useRef<HTMLDialogElement>(null)
   const [accountStart, setAccountStart] = useState<AccountStart>({ mode: 'signin', step: 'form' })
-  const [accountOpens, setAccountOpens] = useState(0)
 
   async function openAccount(start: AccountStart) {
     // Counted before the dialog opens, within 400 ms (still feels instant), so its first line never changes under
@@ -134,7 +123,6 @@ export default function App() {
           ])
         : ''
     setAccountStart({ ...start, held })
-    setAccountOpens((n) => n + 1)
     if (!accountDialog.current?.open) accountDialog.current?.showModal()
   }
 
@@ -224,7 +212,7 @@ export default function App() {
           />
         </TabsContent>
       </main>
-      <AccountDialog dialog={accountDialog} start={accountStart} opens={accountOpens} user={user} />
+      <AccountDialog dialog={accountDialog} start={accountStart} user={user} />
     </Tabs>
   )
 }

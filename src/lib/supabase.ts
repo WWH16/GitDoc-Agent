@@ -35,11 +35,6 @@ export async function sendPasswordReset(email: string): Promise<void> {
   if (error) throw new Error(authMessage(error))
 }
 
-/** Reloads the user from Supabase, e.g. after the email was confirmed in another tab or on another device. */
-export async function refreshAccount(): Promise<void> {
-  await supabase.auth.refreshSession()
-}
-
 /** Signs in to history saved earlier, e.g. on another device; this browser's anonymous history stays behind. */
 export async function signIn(email: string, password: string): Promise<void> {
   const { error } = await supabase.auth.signInWithPassword({ email, password })

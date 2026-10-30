@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  refreshAccount,
   resendConfirmation,
   sendConfirmation,
   sendPasswordReset,
@@ -15,7 +14,7 @@ import {
   signOut,
   supabase,
 } from '@/lib/supabase'
-import { accountState, needsPassword } from '../api'
+import { needsPassword } from '../api'
 
 export type AccountMode = 'signin' | 'signup'
 // Sign up: form → sent (check your email) → password → done. Sign in: form, or reset-sent when the password was forgotten
@@ -53,7 +52,7 @@ export function useAccount() {
       if (event === 'PASSWORD_RECOVERY') setRecovering(true)
     })
     const recheck = () => {
-      if (current.current?.is_anonymous && current.current.new_email) refreshAccount().catch(() => {})
+      if (current.current?.is_anonymous && current.current.new_email) supabase.auth.refreshSession().catch(() => {})
     }
     addEventListener('focus', recheck)
     return () => {
@@ -62,7 +61,7 @@ export function useAccount() {
     }
   }, [])
 
-  return { user, saved: accountState(user) === 'saved', needsPassword: needsPassword(user), recovering }
+  return { user, saved: !!user && !user.is_anonymous, needsPassword: needsPassword(user), recovering }
 }
 
 /** Header control: Sign in until the account has an email (Confirm email while a link is pending); then an account menu. */
@@ -121,17 +120,14 @@ export function AccountMenu({ user, saved, onOpen }: { user: User | null; saved:
 }
 
 /** Sign up in two steps (confirm the email, then set a password; the account keeps this browser's docs and chats),
- *  or sign in to an account made earlier.
- *  `opens` changes each time the dialog opens, with `start` saying where. */
+ *  or sign in to an account made earlier. Each open passes a new `start`, saying where to begin. */
 export function AccountDialog({
   dialog,
   start,
-  opens,
   user,
 }: {
   dialog: RefObject<HTMLDialogElement | null>
   start: AccountStart
-  opens: number
   user: User | null
 }) {
   const [mode, setMode] = useState<AccountMode>(start.mode)
@@ -151,19 +147,18 @@ export function AccountDialog({
   const address = email.trim() || user?.email || user?.new_email || ''
 
   useEffect(() => {
-    if (!opens) return
     setMode(start.mode)
     setStep(start.step)
     setRecovery(!!start.recovery)
     setError(start.message ?? '')
-  }, [opens, start])
+  }, [start])
   const held = start.held ?? ''
 
   // The field the step asks for gets the cursor
   useEffect(() => {
     if (step === 'form') emailInput.current?.focus()
     if (step === 'password') passwordInput.current?.focus()
-  }, [step, mode, opens])
+  }, [step, mode, start])
 
   useEffect(() => {
     if (cooldown <= 0) return
