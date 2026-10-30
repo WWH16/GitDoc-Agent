@@ -32,6 +32,9 @@ export default defineConfig(({ mode }) => {
     // `vite preview` has no guard, so it gets no proxy (it would otherwise copy server.proxy below)
     preview: { proxy: {} },
     server: {
+      // One port only: a second server on 5174 would be another origin, with its own sign-in and saved state
+      port: 5173,
+      strictPort: true,
       // /api/generate and /api/progress are served by guardPlugin itself
       proxy: {
         // Token header added here; Ask can take 2+ minutes, so the timeouts are long

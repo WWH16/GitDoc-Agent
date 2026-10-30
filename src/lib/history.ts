@@ -19,16 +19,18 @@ const toGeneration = (r: Row): Generation => ({
   preview: r.preview ?? r.markdown ?? '',
 })
 
-export async function saveGeneration(g: Omit<Generation, 'id' | 'createdAt'> & { executionId: string }): Promise<void> {
+/** Saves a run and returns its id. */
+export async function saveGeneration(g: Omit<Generation, 'id' | 'createdAt'> & { executionId: string }): Promise<string> {
   await accessToken()
-  const { error } = await supabase.from('generations').insert({
+  const { data, error } = await supabase.from('generations').insert({
     repo: g.repo,
     status: g.status,
     markdown: g.markdown,
     preview: g.preview.length <= MAX_PREVIEW ? g.preview : null,
     execution_id: g.executionId,
-  })
+  }).select('id').single()
   if (error) throw new Error(error.message)
+  return data.id
 }
 
 /** The newest 20, without the docs themselves (loadGeneration fetches those). */

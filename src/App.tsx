@@ -91,20 +91,34 @@ function save(key: string, value: unknown) {
 
 type RepoProps = { repo: string; setRepo: (v: string) => void }
 
-// The landing page's form links here as /app/?repo=<url>; that beats the saved repo
+// The landing page's form links here as /app/?repo=<url>; that beats the saved repo, tab and docs
 const LANDING_REPO = new URLSearchParams(location.search).get('repo')
-if (LANDING_REPO) save('gitdoc:repo', LANDING_REPO)
+if (LANDING_REPO) {
+  save('gitdoc:repo', LANDING_REPO)
+  save('gitdoc:tab', null)
+  save('gitdoc:doc', null)
+}
 
 export default function App() {
   const [repo, setRepo] = useState(() => load<string>('gitdoc:repo') ?? '')
   useEffect(() => save('gitdoc:repo', repo), [repo])
-  const [tab, setTab] = useState('generate')
+  // The tab and the docs on screen come back after a reload
+  const [tab, setTab] = useState(() => load<string>('gitdoc:tab') ?? 'generate')
+  useEffect(() => save('gitdoc:tab', tab), [tab])
   const [generations, setGenerations] = useState<Generation[] | null>(null)
   const [historyError, setHistoryError] = useState('')
   // Docs reopened from History; the Generate tab shows them
   const [opened, setOpened] = useState<Generation | null>(null)
   // A run in progress keeps the Generate tab, so History cannot open other docs into it meanwhile
   const [running, setRunning] = useState(false)
+  const runningChange = useCallback((on: boolean) => {
+    setRunning(on)
+    if (on) save('gitdoc:doc', null)
+  }, [])
+  useEffect(() => {
+    const id = load<string>('gitdoc:doc')
+    if (id) loadGeneration(id).then(setOpened, () => save('gitdoc:doc', null))
+  }, [])
   const { user, saved, needsPassword, recovering } = useAccount()
   const accountDialog = useRef<HTMLDialogElement>(null)
   const [accountStart, setAccountStart] = useState<AccountStart>({ mode: 'signin', step: 'form' })
@@ -149,19 +163,24 @@ export default function App() {
     }
   }, [])
 
-  function changeTab(value: string) {
-    setTab(value)
-    if (value === 'history') refresh()
+  useEffect(() => {
+    if (tab === 'history') refresh()
+  }, [tab, refresh])
+
+  function finished(id: string) {
+    save('gitdoc:doc', id)
+    refresh()
   }
 
   function open(g: Generation) {
+    save('gitdoc:doc', g.id)
     setOpened(g)
     setRepo(g.repo)
     setTab('generate')
   }
 
   return (
-    <Tabs value={tab} onValueChange={changeTab} className="min-h-screen gap-0">
+    <Tabs value={tab} onValueChange={setTab} className="min-h-screen gap-0">
       <header className="slab sticky top-0 z-10 bg-background text-foreground">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4 xl:max-w-[88rem]">
           <a href="/" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
@@ -187,8 +206,8 @@ export default function App() {
             repo={repo}
             setRepo={setRepo}
             opened={opened}
-            onFinished={refresh}
-            onRunningChange={setRunning}
+            onFinished={finished}
+            onRunningChange={runningChange}
             unsaved={!saved}
             onSave={signUp}
           />
@@ -216,7 +235,8 @@ export default function App() {
 
 type GenerateProps = RepoProps & {
   opened: Generation | null
-  onFinished: () => void
+  /** Called with the id the finished run was saved under */
+  onFinished: (id: string) => void
   onRunningChange: (running: boolean) => void
   /** The history lives in this browser only, so finished docs come with a prompt to save it */
   unsaved: boolean
