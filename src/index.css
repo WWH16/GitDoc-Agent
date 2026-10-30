@@ -6,8 +6,11 @@
 @custom-variant dark (&:is(.dark *));
 
 /* shadcn/ui "neutral" theme. Light by default, `.dark` on <html> switches.
+   `.slab` (the sticky header on both pages) takes the other theme's palette, so it is an ink bar in light mode and a paper bar in dark mode,
+   and every control inside reads on it without its own colours.
    Radius rule: controls (buttons, inputs, tabs, badges) are full pills; surfaces (cards, composer, bubbles) are rounded-2xl; boxes nested in a surface are rounded-xl. */
-:root {
+:root,
+.dark .slab {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -36,7 +39,8 @@
   --scrim: oklch(0.145 0 0 / 50%);
 }
 
-.dark {
+.dark,
+:root:not(.dark) .slab {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);

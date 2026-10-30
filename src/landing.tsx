@@ -3,6 +3,7 @@ import { StrictMode, useEffect, useRef, useState, useSyncExternalStore, type CSS
 import { createRoot } from 'react-dom/client'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
+import { ThemeToggle, useDark } from '@/components/theme-toggle'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -16,9 +17,6 @@ const APP_URL = '/app/'
 const LEAD = 'max-w-[52ch] text-lead leading-[1.45] text-pretty text-muted-foreground'
 const CODE = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.85em]'
 const QUICK = 'duration-200 ease-out-quart motion-reduce:transition-none'
-
-// The page has no theme toggle: the saved theme is applied before first paint (index.html), so read it once
-const DARK = document.documentElement.classList.contains('dark')
 
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -60,17 +58,17 @@ const NAV = [
   ['Run it', '#run'],
 ] as const
 
-// A slab: one solid full-width bar in the ink, so it reads as chrome without blurring the page under it
+// A slab: one solid full-width bar in the other theme's palette (index.css), the same bar as the app's header
 function Header() {
   return (
-    <header className="sticky top-0 z-20 bg-foreground text-background">
+    <header className="slab sticky top-0 z-20 bg-background text-foreground">
       <div className="container flex h-16 items-center gap-8">
         <a href="#top" aria-label="GitDoc Agent, back to top" className="rounded-md">
           <Logo />
         </a>
         <nav aria-label="Page sections" className="hidden gap-6 text-sm md:flex">
           {NAV.map(([label, href]) => (
-            <a key={href} href={href} className={cn('rounded-sm text-background/75 transition-colors hover:text-background', QUICK)}>
+            <a key={href} href={href} className={cn('rounded-sm text-foreground/75 transition-colors hover:text-foreground', QUICK)}>
               {label}
             </a>
           ))}
@@ -79,11 +77,12 @@ function Header() {
           <a
             href={REPO_URL}
             aria-label="GitDoc Agent on GitHub"
-            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'text-background hover:bg-background/10 hover:text-background')}
+            className={buttonVariants({ variant: 'ghost', size: 'icon' })}
           >
             <GitHubIcon className="size-5" />
           </a>
-          <a href={APP_URL} className={cn(buttonVariants(), 'bg-background text-foreground hover:bg-background/90 active:translate-y-px')}>
+          <ThemeToggle />
+          <a href={APP_URL} className={cn(buttonVariants(), 'active:translate-y-px')}>
             Open the app
           </a>
         </div>
@@ -95,8 +94,6 @@ function Header() {
 // Pixel sizes of the 2x captures in public/landing: a 1440 x 900 screen, a 390 x 844 phone
 const SCREEN = [2880, 1800] as const
 const PHONE_SIZE = [780, 1688] as const
-
-const src = (file: string) => `/landing/${file}-${DARK ? 'dark' : 'light'}.webp`
 
 /** A whole screenshot of the running app, never cropped or zoomed. Below 40rem the browser swaps in the `phone`
  *  capture itself (<picture>), live as the window resizes. */
@@ -115,6 +112,9 @@ function Shot({
   priority?: boolean
   className?: string
 }) {
+  // The captures follow the theme: toggling it swaps in the matching set
+  const dark = useDark()
+  const src = (file: string) => `/landing/${file}-${dark ? 'dark' : 'light'}.webp`
   return (
     <figure className={cn('shot', className)}>
       <picture>

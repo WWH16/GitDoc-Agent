@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, RefreshCw, SquarePen } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { AccountDialog, AccountMenu, useAccount, type AccountStart } from '@/com
 import { linkError } from '@/lib/session'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { ZoomableArticle } from '@/components/zoomable-article'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
@@ -165,7 +166,7 @@ export default function App() {
 
   return (
     <Tabs value={tab} onValueChange={changeTab} className="min-h-screen gap-0">
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
+      <header className="slab sticky top-0 z-10 bg-background text-foreground">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-2 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:h-14 sm:gap-4 xl:max-w-[88rem]">
           <a href="/" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             <Logo />
@@ -214,37 +215,6 @@ export default function App() {
       </main>
       <AccountDialog dialog={accountDialog} start={accountStart} user={user} />
     </Tabs>
-  )
-}
-
-const THEMES = ['light', 'dark', 'system'] as const
-
-// index.html applies the saved theme before first paint; this cycles light, dark, system
-function ThemeToggle() {
-  const [theme, setTheme] = useState<(typeof THEMES)[number]>(() => {
-    try {
-      const t = localStorage.getItem('theme')
-      return THEMES.find((x) => x === t) ?? 'system'
-    } catch {
-      return 'system'
-    }
-  })
-  const Icon = { light: Sun, dark: Moon, system: Monitor }[theme]
-
-  function cycle() {
-    const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
-    setTheme(next)
-    const dark = next === 'dark' || (next === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
-    document.documentElement.classList.toggle('dark', dark)
-    try {
-      localStorage.setItem('theme', next)
-    } catch {}
-  }
-
-  return (
-    <Button variant="ghost" size="icon" aria-label={`Theme: ${theme}. Change theme`} title={`Theme: ${theme}`} onClick={cycle}>
-      <Icon />
-    </Button>
   )
 }
 
