@@ -182,7 +182,7 @@ function HeroDemo() {
           <div className="flex rounded-full bg-muted p-[3px] text-xs font-medium text-muted-foreground">
             <span className="rounded-full bg-background px-2.5 py-1 text-foreground shadow-xs dark:bg-input/30">Generate</span>
             <span className="px-2.5 py-1">Ask</span>
-            <span className="px-2.5 py-1">Run history</span>
+            <span className="px-2.5 py-1">History</span>
           </div>
         </div>
         <div className="space-y-4 p-4 sm:p-5">
@@ -490,7 +490,7 @@ function Features() {
 }
 
 const TREE = `src/
-├─ App.tsx        Generate, Ask and Run history
+├─ App.tsx        Generate, Ask and History
 ├─ api.ts         calls to the n8n workflow
 └─ components/    shared UI
 vite.config.ts    dev proxy that adds the n8n keys`

@@ -53,7 +53,7 @@ test('authMessage puts Supabase sign-in errors in plain words', () => {
   assert.equal(authMessage({ code: 'invalid_credentials', message: 'Invalid login credentials' }), 'Wrong email or password.')
   assert.equal(
     authMessage({ code: 'email_exists', message: 'A user with this email address has already been registered' }),
-    'This email already has saved history. Use the Sign in tab.',
+    'An account with this email already exists. Sign in instead.',
   )
   assert.equal(authMessage({ code: 'weak_password', message: 'Password should be at least 6 characters.' }), 'Use a password of at least 6 characters.')
   assert.equal(authMessage({ status: 429, message: 'Request rate limit reached' }), 'Too many tries. Wait a few minutes and try again.')

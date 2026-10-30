@@ -1,5 +1,5 @@
 import type { User } from '@supabase/supabase-js'
-import { CircleCheck, CloudUpload, Eye, EyeOff, KeyRound, Loader2, LogOut, MailCheck, TriangleAlert } from 'lucide-react'
+import { CircleCheck, Eye, EyeOff, KeyRound, Loader2, LogIn, LogOut, MailCheck, TriangleAlert } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { useEffect, useRef, useState, type ComponentProps, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
@@ -17,8 +17,8 @@ import {
 } from '@/lib/supabase'
 import { accountState, needsPassword } from '../api'
 
-export type AccountMode = 'save' | 'signin'
-// form → sent (check your email) → password → done; Sign in: form → reset-sent when the password was forgotten
+export type AccountMode = 'signin' | 'signup'
+// Sign up: form → sent (check your email) → password → done. Sign in: form, or reset-sent when the password was forgotten
 export type AccountStep = 'form' | 'sent' | 'password' | 'reset-sent' | 'done'
 /** Where the dialog opens: `message` shows as an error (a link that failed); `recovery` means a password reset. */
 export type AccountStart = {
@@ -65,7 +65,7 @@ export function useAccount() {
   return { user, saved: accountState(user) === 'saved', needsPassword: needsPassword(user), recovering }
 }
 
-/** Header control: "Save history" while the history lives in this browser only; once saved, an account menu. */
+/** Header control: Sign in until the account has an email (Confirm email while a link is pending); then an account menu. */
 export function AccountMenu({ user, saved, onOpen }: { user: User | null; saved: boolean; onOpen: (start: AccountStart) => void }) {
   if (!saved) {
     const pending = user?.new_email
@@ -74,11 +74,10 @@ export function AccountMenu({ user, saved, onOpen }: { user: User | null; saved:
         variant="outline"
         size="sm"
         // A sent link is not lost by closing the dialog: this reopens on "Check your email"
-        onClick={() => onOpen({ mode: 'save', step: pending ? 'sent' : 'form' })}
-        title="Keep your docs and chats on any device"
+        onClick={() => onOpen(pending ? { mode: 'signup', step: 'sent' } : { mode: 'signin', step: 'form' })}
       >
-        <CloudUpload />
-        <span className="sr-only sm:not-sr-only">{pending ? 'Confirm email' : 'Save history'}</span>
+        {pending ? <MailCheck /> : <LogIn />}
+        <span className="sr-only sm:not-sr-only">{pending ? 'Confirm email' : 'Sign in'}</span>
       </Button>
     )
   }
@@ -101,13 +100,13 @@ export function AccountMenu({ user, saved, onOpen }: { user: User | null; saved:
             <p className="truncate text-sm font-medium" title={email}>
               {email}
             </p>
-            <p className="text-xs text-muted-foreground">Your docs and chats are saved to this account.</p>
+            <p className="text-xs text-muted-foreground">Your docs and chats are saved to your account.</p>
           </div>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           {needsPassword(user) && (
-            <DropdownMenu.Item className={item} onSelect={() => onOpen({ mode: 'save', step: 'password' })}>
+            <DropdownMenu.Item className={item} onSelect={() => onOpen({ mode: 'signup', step: 'password' })}>
               <KeyRound className="size-4" />
-              Choose a password
+              Set password
             </DropdownMenu.Item>
           )}
           {/* Reload so nothing of this account stays on screen */}
@@ -121,7 +120,8 @@ export function AccountMenu({ user, saved, onOpen }: { user: User | null; saved:
   )
 }
 
-/** Save history in two steps (confirm the email, then choose a password), or sign in to history saved earlier.
+/** Sign up in two steps (confirm the email, then set a password; the account keeps this browser's docs and chats),
+ *  or sign in to an account made earlier.
  *  `opens` changes each time the dialog opens, with `start` saying where. */
 export function AccountDialog({
   dialog,
@@ -198,7 +198,7 @@ export function AccountDialog({
         setStep('done')
       })
     }
-    if (mode === 'save') {
+    if (mode === 'signup') {
       return run(async () => {
         const result = await sendConfirmation(email.trim())
         setStep(result === 'sent' ? 'sent' : 'password')
@@ -225,7 +225,7 @@ export function AccountDialog({
   }
 
   const close = () => dialog.current?.close()
-  const save = mode === 'save'
+  const signup = mode === 'signup'
 
   return (
     <dialog
@@ -237,7 +237,7 @@ export function AccountDialog({
       {step === 'sent' && (
         <Panel icon={<MailCheck className="size-8 text-primary" aria-hidden />} title="Check your email">
           <p>
-            We sent a link to <Strong>{address}</Strong>. Open it to confirm your email, then choose a password. Your docs and
+            We sent a link to <Strong>{address}</Strong>. Open it to confirm your email, then set a password. Your docs and
             chats stay here while you wait.
           </p>
           <p>
@@ -249,8 +249,8 @@ export function AccountDialog({
           </p>
           {error && <ErrorText>{error}</ErrorText>}
           <Actions>
-            <Button variant="ghost" onClick={() => (setStep('form'), setMode('save'), setError(''))}>
-              Use another email
+            <Button variant="ghost" onClick={() => (setStep('form'), setMode('signup'), setError(''))}>
+              Change email
             </Button>
             <Button onClick={close}>Close</Button>
           </Actions>
@@ -261,7 +261,7 @@ export function AccountDialog({
         <Panel icon={<MailCheck className="size-8 text-primary" aria-hidden />} title="Check your email">
           {/* Same answer whether or not the email has an account, so nobody can probe for accounts */}
           <p>
-            If <Strong>{address}</Strong> has saved history, we sent it a link to choose a new password.
+            If an account uses <Strong>{address}</Strong>, we sent it a link to reset the password.
           </p>
           <Actions>
             <Button onClick={close}>Close</Button>
@@ -270,7 +270,7 @@ export function AccountDialog({
       )}
 
       {step === 'done' && (
-        <Panel icon={<CircleCheck className="size-8 text-success" aria-hidden />} title={recovery ? 'Password changed' : 'History saved'}>
+        <Panel icon={<CircleCheck className="size-8 text-success" aria-hidden />} title={recovery ? 'Password updated' : 'Account created'}>
           <p>
             Sign in with <Strong>{address}</Strong> on any device to see your docs and chats.
           </p>
@@ -291,11 +291,11 @@ export function AccountDialog({
               }}
             >
               <TabsList className="w-full">
-                <TabsTrigger value="save" className="flex-1">
-                  Save history
-                </TabsTrigger>
                 <TabsTrigger value="signin" className="flex-1">
                   Sign in
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="flex-1">
+                  Sign up
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -303,23 +303,23 @@ export function AccountDialog({
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1">
               <h2 id="account-title" className="text-lg font-semibold tracking-tight">
-                {step === 'password' ? (recovery ? 'Choose a new password' : 'Email confirmed') : save ? 'Save your history' : 'Sign in to your history'}
+                {step === 'password' ? (recovery ? 'Set a new password' : 'Email confirmed') : signup ? 'Create an account' : 'Welcome back'}
               </h2>
               <p className="text-sm text-muted-foreground">
                 {step === 'password'
                   ? recovery
                     ? `Use it with ${address} from now on.`
-                    : `Last step: choose a password to sign in with ${address} on any device.`
-                  : save
+                    : `Last step: set a password so you can sign in as ${address} on any device.`
+                  : signup
                     ? `${held ? `Keep your ${held} on any device. ` : ''}Enter your email and we’ll send a link to confirm it’s yours.`
-                    : 'Use the email and password you saved your history with.'}
+                    : 'Sign in to see the docs and chats saved to your account.'}
               </p>
             </div>
 
-            {step === 'form' && !save && held && (
+            {step === 'form' && !signup && held && (
               <p className="flex gap-2 text-sm text-warning">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                Unsaved in this browser: {held}. Signing in replaces this browser’s history with your account’s.
+                Unsaved in this browser: {held}. Sign up to keep this browser’s history; signing in replaces it with your account’s.
               </p>
             )}
 
@@ -338,7 +338,7 @@ export function AccountDialog({
               </Field>
             )}
 
-            {(step === 'password' || !save) && (
+            {(step === 'password' || !signup) && (
               <Field
                 label={step === 'password' ? 'New password' : 'Password'}
                 id="account-password"
@@ -385,11 +385,11 @@ export function AccountDialog({
 
             <Actions>
               <Button type="button" variant="ghost" onClick={close}>
-                {step === 'password' ? 'Later' : 'Cancel'}
+                {step === 'password' ? 'Not now' : 'Cancel'}
               </Button>
               <Button type="submit" disabled={busy}>
                 {busy && <Loader2 className="motion-safe:animate-spin" />}
-                {step === 'password' ? 'Save password' : save ? 'Send link' : 'Sign in'}
+                {step === 'password' ? (recovery ? 'Update password' : 'Create account') : signup ? 'Send link' : 'Sign in'}
               </Button>
             </Actions>
           </form>

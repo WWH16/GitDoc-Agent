@@ -53,7 +53,7 @@ export function authMessage(error: AuthError): string {
   if (code === 'over_email_send_rate_limit' || /email rate limit/i.test(m)) return 'Too many emails were sent. Wait a few minutes and try again.'
   if (error.status === 429 || /rate limit/i.test(m)) return 'Too many tries. Wait a few minutes and try again.'
   if (code === 'invalid_credentials' || /invalid login credentials/i.test(m)) return 'Wrong email or password.'
-  if (code === 'email_exists' || /already (been )?registered/i.test(m)) return 'This email already has saved history. Use the Sign in tab.'
+  if (code === 'email_exists' || /already (been )?registered/i.test(m)) return 'An account with this email already exists. Sign in instead.'
   if (code === 'weak_password' || /password should be at least/i.test(m)) return 'Use a password of at least 6 characters.'
   if (code === 'same_password' || /different from the old password/i.test(m)) return 'Choose a password different from your current one.'
   if (code === 'email_address_invalid' || /email address .* is invalid/i.test(m)) return 'Enter a valid email address.'

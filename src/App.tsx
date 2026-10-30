@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, CloudUpload, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -103,7 +103,7 @@ type RepoProps = { repo: string; setRepo: (v: string) => void }
 // The landing page's form links here as /app/?repo=<url>; that beats the saved repo
 const LANDING_REPO = new URLSearchParams(location.search).get('repo')
 if (LANDING_REPO) save('gitdoc:repo', LANDING_REPO)
-// Docs used to be kept in this browser (up to a few MB); they live in Run history now
+// Docs used to be kept in this browser (up to a few MB); they live in History now
 save('gitdoc:last-run', null)
 // Ask chats used to be kept here too; each repository has its own saved chat now
 save('gitdoc:ask-messages', null)
@@ -120,7 +120,7 @@ export default function App() {
   const [running, setRunning] = useState(false)
   const { user, saved, needsPassword, recovering } = useAccount()
   const accountDialog = useRef<HTMLDialogElement>(null)
-  const [accountStart, setAccountStart] = useState<AccountStart>({ mode: 'save', step: 'form' })
+  const [accountStart, setAccountStart] = useState<AccountStart>({ mode: 'signin', step: 'form' })
   const [accountOpens, setAccountOpens] = useState(0)
 
   async function openAccount(start: AccountStart) {
@@ -138,12 +138,12 @@ export default function App() {
     if (!accountDialog.current?.open) accountDialog.current?.showModal()
   }
 
-  // Save history picks up where it stands: a link already sent reopens on "Check your email"
-  const saveHistory = () => openAccount({ mode: 'save', step: user?.new_email ? 'sent' : 'form' })
+  // Sign up picks up where it stands: a link already sent reopens on "Check your email"
+  const signUp = () => openAccount({ mode: 'signup', step: user?.new_email ? 'sent' : 'form' })
 
   // An email link brought the user back, or this tab saw the email confirmed elsewhere: carry on with the next step
   useEffect(() => {
-    if (needsPassword) openAccount({ mode: 'save', step: 'password' })
+    if (needsPassword) openAccount({ mode: 'signup', step: 'password' })
   }, [needsPassword])
   useEffect(() => {
     if (recovering) openAccount({ mode: 'signin', step: 'password', recovery: true })
@@ -152,7 +152,7 @@ export default function App() {
     const message = linkError(location.href)
     if (!message) return
     history.replaceState(null, '', location.pathname)
-    openAccount({ mode: 'save', step: 'form', message })
+    openAccount({ mode: 'signup', step: 'form', message })
   }, [])
 
   const refresh = useCallback(async () => {
@@ -205,7 +205,7 @@ export default function App() {
             onFinished={refresh}
             onRunningChange={setRunning}
             unsaved={!saved}
-            onSave={saveHistory}
+            onSave={signUp}
           />
         </TabsContent>
         <TabsContent value="ask" forceMount className="mx-auto w-full max-w-3xl data-[state=inactive]:hidden 2xl:max-w-4xl">
@@ -219,7 +219,7 @@ export default function App() {
             onOpen={open}
             running={running}
             unsaved={!saved}
-            onSave={saveHistory}
+            onSave={signUp}
             onGenerate={() => setTab('generate')}
           />
         </TabsContent>
@@ -282,7 +282,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
   // The docs came from the shared cache: the repository had not changed since they were generated, so nothing ran
   const [cached, setCached] = useState(false)
 
-  // Docs opened from Run history replace what this tab shows, unless a run is going (it keeps the tab)
+  // Docs opened from History replace what this tab shows, unless a run is going (it keeps the tab)
   useEffect(() => {
     if (!opened || phase === 'running') return
     let current = true
@@ -476,7 +476,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
           <p className="text-sm text-muted-foreground">
             Kept in this browser only.{' '}
             <button type="button" onClick={onSave} className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 active:opacity-70">
-              Save history
+              Sign up
             </button>{' '}
             to open these docs on any device.
           </p>
@@ -999,8 +999,7 @@ function History({
             <span className="text-muted-foreground">Clearing its data or switching devices loses them.</span>
           </p>
           <Button size="sm" onClick={onSave} className="self-start sm:self-auto">
-            <CloudUpload />
-            Save history
+            Sign up
           </Button>
         </div>
       )}
