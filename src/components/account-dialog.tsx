@@ -33,9 +33,17 @@ export function useAccount() {
   current.current = user
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
+    // The last account this tab showed. Another tab signing in to a different one (Supabase syncs tabs) would leave
+    // this tab showing the old account's docs and chats, so it starts over. A sign-out in between does not reset it.
+    let shown: string | null = null
+    const track = (next: User | null) => {
+      if (shown && next && next.id !== shown) location.reload()
+      if (next) shown = next.id
+      setUser(next)
+    }
+    supabase.auth.getSession().then(({ data }) => track(data.session?.user ?? null))
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
+      track(session?.user ?? null)
       if (event === 'PASSWORD_RECOVERY') setRecovering(true)
     })
     const recheck = () => {
