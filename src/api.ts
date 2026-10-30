@@ -2,6 +2,9 @@
 
 export const URL_PLACEHOLDER = 'https://github.com/<username>/<repo-name>'
 
+/** The repo URL normalized like the n8n workflows do, so each repository has one key however it was typed. */
+export const repoKey = (url: string) => url.trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '')
+
 export type Result = { markdown: string; preview: string }
 
 export type Answer = { answer: string; sources: string[] }

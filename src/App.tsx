@@ -19,9 +19,11 @@ import {
   callWorkflow,
   currentStep,
   getProgress,
+  repoKey,
   type Result,
   type Turn,
 } from './api'
+import { deleteChat, loadChat, saveChat, type Message } from './lib/chats'
 import { listGenerations, loadGeneration, saveGeneration, type Generation } from './lib/history'
 import { showProgressHint, type NodeRun, type Progress as RunProgress } from './progress'
 
@@ -100,6 +102,9 @@ const LANDING_REPO = new URLSearchParams(location.search).get('repo')
 if (LANDING_REPO) save('gitdoc:repo', LANDING_REPO)
 // Docs used to be kept in this browser (up to a few MB); they live in Run history now
 save('gitdoc:last-run', null)
+// Ask chats used to be kept here too; each repository has its own saved chat now
+save('gitdoc:ask-messages', null)
+save('gitdoc:ask-session', null)
 
 export default function App() {
   const [repo, setRepo] = useSavedState('gitdoc:repo', () => '')
@@ -466,9 +471,6 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
   )
 }
 
-// `text` is the raw answer sent back as history; chats saved before it existed only have `html`
-type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; text?: string; sources: string[] }
-
 const toTurn = (m: Message): Turn =>
   m.role === 'user'
     ? { role: 'user', text: m.text }
@@ -488,9 +490,14 @@ const waitMessage = (s: number) =>
       : 'This is taking longer than usual. Keep waiting, or stop and try again.'
 
 function Ask({ repo, setRepo }: RepoProps) {
-  // One sessionId per chat, so the backend keeps the conversation's context; both are saved so the chat continues
-  const [sessionId, setSessionId] = useSavedState('gitdoc:ask-session', () => crypto.randomUUID())
-  const [messages, setMessages] = useSavedState<Message[]>('gitdoc:ask-messages', () => [])
+  // One chat per repository, saved for this user; its sessionId keeps the conversation's context in the backend
+  const key = repoKey(repo)
+  const [sessionId, setSessionId] = useState<string>(() => crypto.randomUUID())
+  const [messages, setMessages] = useState<Message[]>([])
+  // The repo key whose chat is on screen. Until it matches `key`, the chat is loading and nothing can be sent.
+  const [shown, setShown] = useState<string | null>(null)
+  const shownRef = useRef(shown)
+  shownRef.current = shown
   const [question, setQuestion] = useState('')
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -500,8 +507,26 @@ function Ask({ repo, setRepo }: RepoProps) {
   const refocus = useRef(false)
   const end = useRef<HTMLDivElement>(null)
   const pending = startedAt !== null
-  const noRepo = !repo.trim()
+  const noRepo = !key
+  const ready = shown === key
   const waited = pending ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
+
+  // Load the repo's chat when the URL settles (400 ms), not on every keystroke. A failed load starts an empty chat.
+  useEffect(() => {
+    let current = true
+    const id = setTimeout(async () => {
+      const chat = key ? await loadChat(key).catch(() => null) : null
+      if (!current) return
+      setSessionId(chat?.sessionId ?? crypto.randomUUID())
+      setMessages(chat?.messages ?? [])
+      setFailed(null)
+      setShown(key)
+    }, 400)
+    return () => {
+      current = false
+      clearTimeout(id)
+    }
+  }, [key])
 
   // Tick once a second while waiting, for the elapsed time and wait message
   useEffect(() => {
@@ -522,11 +547,12 @@ function Ask({ repo, setRepo }: RepoProps) {
 
   async function send(text: string, retry = false) {
     const q = text.trim()
-    if (!q || noRepo || pending) return
+    if (!q || noRepo || pending || !ready) return
     // A retry asks the question that already ends the chat: it is not added again, nor sent as history
     const prior = retry ? messages.slice(0, -1) : messages
+    const asked: Message[] = retry ? messages : [...messages, { role: 'user', text: q }]
     if (!retry) {
-      setMessages((m) => [...m, { role: 'user', text: q }])
+      setMessages(asked)
       setQuestion('')
     }
     setFailed(null)
@@ -539,7 +565,11 @@ function Ask({ repo, setRepo }: RepoProps) {
     try {
       const { answer, sources } = await askRepo(repo.trim(), q, sessionId, prior.map(toTurn), ctrl.signal)
       const html = await renderMarkdown(answer)
-      setMessages((m) => [...m, { role: 'assistant', html, text: answer, sources }])
+      const chat: Message[] = [...asked, { role: 'assistant', html, text: answer, sources }]
+      // The answer belongs to the repo it was asked about, even if the URL changed while waiting
+      if (shownRef.current === key) setMessages(chat)
+      // A failed save leaves the chat on screen; it is only missing after a reload
+      saveChat(key, sessionId, chat).catch(() => {})
     } catch (e) {
       const cancelled = ctrl.signal.aborted
       setFailed({ question: q, message: cancelled ? 'You stopped waiting for this answer.' : (e as Error).message, cancelled })
@@ -550,6 +580,7 @@ function Ask({ repo, setRepo }: RepoProps) {
   }
 
   function newChat() {
+    deleteChat(key).catch(() => {})
     setMessages([])
     setFailed(null)
     setSessionId(crypto.randomUUID())
@@ -587,7 +618,7 @@ function Ask({ repo, setRepo }: RepoProps) {
         type="submit"
         size="icon"
         className="rounded-full"
-        disabled={pending || noRepo || !question.trim()}
+        disabled={pending || noRepo || !ready || !question.trim()}
         aria-label="Send"
       >
         <ArrowUp />
@@ -607,7 +638,7 @@ function Ask({ repo, setRepo }: RepoProps) {
           <RepoInput id="ask-repo" value={repo} onChange={setRepo} />
         </div>
         {/* Disabled while waiting, so a late answer never lands in the new chat */}
-        <Button variant="ghost" size="sm" onClick={newChat} disabled={pending || messages.length === 0} className="ml-auto">
+        <Button variant="ghost" size="sm" onClick={newChat} disabled={pending || !ready || messages.length === 0} className="ml-auto">
           <SquarePen />
           New chat
         </Button>
@@ -624,7 +655,7 @@ function Ask({ repo, setRepo }: RepoProps) {
                 variant="outline"
                 size="sm"
                 className="rounded-full font-normal text-muted-foreground"
-                disabled={noRepo}
+                disabled={noRepo || !ready}
                 onClick={() => send(s)}
               >
                 {s}
