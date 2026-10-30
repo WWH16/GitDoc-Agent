@@ -525,6 +525,7 @@ function Ask({ repo, setRepo }: RepoProps) {
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [failed, setFailed] = useState<Failure | null>(null)
+  const [saveError, setSaveError] = useState('')
   const abort = useRef<AbortController | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const refocus = useRef(false)
@@ -543,6 +544,7 @@ function Ask({ repo, setRepo }: RepoProps) {
       setSessionId(chat?.sessionId ?? crypto.randomUUID())
       setMessages(chat?.messages ?? [])
       setFailed(null)
+      setSaveError('')
       setShown(key)
     }, 400)
     return () => {
@@ -591,8 +593,11 @@ function Ask({ repo, setRepo }: RepoProps) {
       const chat: Message[] = [...asked, { role: 'assistant', html, text: answer, sources }]
       // The answer belongs to the repo it was asked about, even if the URL changed while waiting
       if (shownRef.current === key) setMessages(chat)
-      // A failed save leaves the chat on screen; it is only missing after a reload
-      saveChat(key, sessionId, chat).catch(() => {})
+      // A failed save (e.g. a chat over the 1 MB limit) leaves the chat on screen but not after a reload, so say so
+      saveChat(key, sessionId, chat).then(
+        () => setSaveError(''),
+        () => setSaveError("Couldn't save this chat. Its newest messages will be gone after a reload."),
+      )
     } catch (e) {
       const cancelled = ctrl.signal.aborted
       setFailed({ question: q, message: cancelled ? 'You stopped waiting for this answer.' : (e as Error).message, cancelled })
@@ -602,8 +607,15 @@ function Ask({ repo, setRepo }: RepoProps) {
     }
   }
 
-  function newChat() {
-    deleteChat(key).catch(() => {})
+  async function newChat() {
+    // Only clear the screen once the saved chat is gone, or it would come back on the next visit
+    try {
+      await deleteChat(key)
+    } catch {
+      setSaveError("Couldn't start a new chat. Try again.")
+      return
+    }
+    setSaveError('')
     setMessages([])
     setFailed(null)
     setSessionId(crypto.randomUUID())
@@ -707,6 +719,12 @@ function Ask({ repo, setRepo }: RepoProps) {
                   Stop waiting
                 </Button>
               </div>
+            )}
+
+            {saveError && (
+              <p role="alert" className="text-sm text-warning">
+                {saveError}
+              </p>
             )}
 
             {failed && (

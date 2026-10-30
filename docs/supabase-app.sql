@@ -46,6 +46,38 @@ create policy "own chats: change" on public.chats for update to authenticated
   using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy "own chats: remove" on public.chats for delete to authenticated using ((select auth.uid()) = user_id);
 
+-- Browsers write these tables directly, so their size is bounded here: short keys, and only the newest rows a user
+-- can see are kept (Run history shows 20 docs). A user can no longer grow the database without limit.
+alter table public.generations drop constraint if exists generations_small_fields;
+alter table public.generations add constraint generations_small_fields
+  check (length(repo) <= 300 and length(status) <= 20 and length(execution_id) <= 40);
+alter table public.chats drop constraint if exists chats_small_fields;
+alter table public.chats add constraint chats_small_fields check (length(repo) <= 300);
+
+create or replace function public.keep_newest_rows()
+returns trigger
+language plpgsql
+set search_path = public
+as $
+begin
+  if tg_table_name = 'generations' then
+    delete from generations where user_id = new.user_id and id not in (
+      select id from generations where user_id = new.user_id order by created_at desc limit 20);
+  else
+    delete from chats where user_id = new.user_id and repo not in (
+      select repo from chats where user_id = new.user_id order by updated_at desc limit 50);
+  end if;
+  return null;
+end;
+$;
+
+drop trigger if exists generations_keep_newest on public.generations;
+create trigger generations_keep_newest after insert on public.generations
+  for each row execute function public.keep_newest_rows();
+drop trigger if exists chats_keep_newest on public.chats;
+create trigger chats_keep_newest after insert on public.chats
+  for each row execute function public.keep_newest_rows();
+
 -- New tables may not be exposed to the Data API by default; RLS above still limits rows to their owner.
 grant select, insert, update, delete on public.generations, public.chats to authenticated;
 
@@ -87,6 +119,8 @@ declare
   rule jsonb;
   used int;
 begin
+  -- One call of a kind at a time: without it, parallel calls all count before any inserts and all pass
+  perform pg_advisory_xact_lock(hashtext('rate_limit_hit:' || p_kind));
   delete from api_calls where at < now() - interval '1 day';
   for rule in select * from jsonb_array_elements(p_rules) loop
     select count(*) into used from api_calls

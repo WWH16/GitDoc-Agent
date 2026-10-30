@@ -7,7 +7,7 @@ import { repoKey } from '../src/api.ts'
 import { runIdOf, toProgress, type Execution, type Progress } from '../src/progress.ts'
 
 export type Rule = { scope: 'user' | 'ip'; limit: number; window: string }
-type Kind = 'generate' | 'ask' | 'progress'
+type Kind = 'generate' | 'ask' | 'progress' | 'lookup'
 
 export const RULES: Record<Kind, Rule[]> = {
   generate: [
@@ -20,6 +20,11 @@ export const RULES: Record<Kind, Rule[]> = {
     { scope: 'ip', limit: 60, window: '1 hour' },
   ],
   progress: [{ scope: 'user', limit: 40, window: '1 minute' }],
+  // Every /api/generate, cached or not: each one asks GitHub for the tree sha (60 an hour per server without a token)
+  lookup: [
+    { scope: 'user', limit: 30, window: '1 hour' },
+    { scope: 'ip', limit: 60, window: '1 hour' },
+  ],
 }
 
 const KINDS: Record<string, Kind> = {
@@ -89,6 +94,10 @@ export type GenerateDeps = {
   /** The generate limit, checked only when n8n has to run. */
   limit(): Promise<GuardError | null>
   n8n(body: object): Promise<Response>
+  /** Whether Ask has indexed code for the repo; cached docs alone would leave Ask without it. */
+  indexed(repo: string): Promise<boolean>
+  /** The cheap limit on every call, checked before GitHub is asked. */
+  lookup(): Promise<GuardError | null>
 }
 
 /** /api/generate: docs for a repository whose files did not change since anyone generated them come from the shared
@@ -98,10 +107,13 @@ export async function generate(
   deps: GenerateDeps,
 ): Promise<{ status: number; body: object; retryAfter?: number }> {
   const repo = repoKey(body.repo)
+  const looked = await deps.lookup()
+  if (looked) return looked
   const sha = await deps.tree(body.repo)
   if (sha && !body.fresh) {
     const doc = await deps.cacheGet(repo, sha).catch(() => null)
-    if (doc) return { status: 200, body: { ...doc, cached: true } }
+    // A run whose indexing failed still cached its docs; running again is what indexes the repo for Ask
+    if (doc && (await deps.indexed(repo).catch(() => false))) return { status: 200, body: { ...doc, cached: true } }
   }
   const denied = await deps.limit()
   if (denied) return denied
@@ -157,16 +169,16 @@ export function guardPlugin(env: Record<string, string>): Plugin {
 function apiGuard(env: Record<string, string>) {
   const admin = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // A slow Supabase fails fast (503 from the guard) instead of holding every request open
+    global: {
+      fetch: (input, init) => {
+        const timeout = AbortSignal.timeout(5000)
+        return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout })
+      },
+    },
   })
   const deps: Deps = {
-    async verify(token) {
-      const { data, error } = await admin.auth.getUser(token)
-      if (error) {
-        if ((error.status ?? 500) < 500) return null
-        throw error
-      }
-      return data.user?.id ?? null
-    },
+    verify: async (token) => userFrom(await admin.auth.getUser(token)),
     async hit(user, ip, kind, rules) {
       const { data, error } = await admin.rpc('rate_limit_hit', { p_user: user, p_ip: ip, p_kind: kind, p_rules: rules })
       if (error) throw error
@@ -189,9 +201,15 @@ function apiGuard(env: Record<string, string>) {
     },
   }
 
-  return async (req: IncomingMessage & { originalUrl?: string }, res: ServerResponse, next: () => void) => {
+  // An error escaping a request handler would be an unhandled rejection, which stops the dev server
+  return (req: IncomingMessage & { originalUrl?: string }, res: ServerResponse, next: () => void) =>
+    handle(req, res, next).catch(() => {
+      if (!res.headersSent) send(res, 500, { error: 'Something went wrong. Try again.' })
+    })
+
+  async function handle(req: IncomingMessage & { originalUrl?: string }, res: ServerResponse, next: () => void) {
     const path = new URL(req.originalUrl ?? req.url ?? '', 'http://localhost').pathname
-    const ip = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || ''
+    const ip = clientIp(req)
     const isGenerate = path === '/api/generate'
     const result = await guard({ path, ip, authorization: req.headers.authorization ?? null }, deps, !isGenerate)
     if (!('user' in result)) {
@@ -210,6 +228,12 @@ function apiGuard(env: Record<string, string>) {
             return m ? treeSha(m[1], m[2], env.GITHUB_TOKEN) : Promise.resolve(null)
           },
           limit: () => limitFor(result.user, ip, 'generate', deps),
+          lookup: () => limitFor(result.user, ip, 'lookup', deps),
+          async indexed(repo) {
+            const { data, error } = await admin.from('documents').select('id').eq('metadata->>repo', repo).limit(1)
+            if (error) throw error
+            return data.length > 0
+          },
           // Node's fetch waits up to 300 s for the response, like the old proxy
           n8n: (b) =>
             fetch(`${env.N8N_URL}${env.N8N_WEBHOOK_PATH}`, {
@@ -242,14 +266,34 @@ function apiGuard(env: Record<string, string>) {
   }
 }
 
-// The request body as an object; anything over 10 KB or not JSON counts as empty
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  let raw = ''
-  for await (const chunk of req) {
-    raw += chunk
-    if (raw.length > 10_000) return {}
+/** The caller's address for the per-IP limits. X-Forwarded-For is ignored: nothing in front of the dev server sets it,
+ *  so a client could send a new one on every call. Behind a proxy (Vercel), use the address that proxy adds. */
+export function clientIp(req: { headers: Record<string, string | string[] | undefined>; socket: { remoteAddress?: string } }) {
+  return req.socket.remoteAddress ?? ''
+}
+
+/** The user id from auth.getUser: null for a token Supabase rejected (4xx), a throw when Supabase could not answer
+ *  (no status means a network failure), so the guard sends 503 instead of "Sign-in expired". */
+export function userFrom({ data, error }: { data: { user: { id: string } | null }; error: { message: string; status?: number } | null }) {
+  if (error) {
+    if (error.status && error.status < 500) return null
+    throw error
   }
+  return data.user?.id ?? null
+}
+
+// The request body as an object; anything over 10 KB or not JSON counts as empty
+export async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  let raw = ''
   try {
+    // A client that disconnects mid-upload makes this loop throw
+    for await (const chunk of req) {
+      raw += chunk
+      if (raw.length > 10_000) {
+        req.destroy()
+        return {}
+      }
+    }
     const v: unknown = JSON.parse(raw)
     return v && typeof v === 'object' ? (v as Record<string, unknown>) : {}
   } catch {

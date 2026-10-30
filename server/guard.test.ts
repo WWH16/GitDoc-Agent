@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Execution } from '../src/progress.ts'
-import { generate, guard, progressFor, type Deps, type GenerateDeps, type GuardError, type Rule } from './guard.ts'
+import { Readable } from 'node:stream'
+import { clientIp, generate, guard, progressFor, readJson, userFrom, type Deps, type GenerateDeps, type GuardError, type Rule } from './guard.ts'
 
 const req = (path: string) => ({ path, ip: '1.2.3.4', authorization: 'Bearer t' })
 const deps = (over: Partial<Deps> = {}): Deps => ({ verify: async () => 'u1', hit: async () => null, ...over })
@@ -61,6 +62,8 @@ const gdeps = (over: Partial<GenerateDeps> = {}): GenerateDeps => ({
   cachePut: async () => {},
   limit: async () => null,
   n8n: async () => new Response('{"markdown":"m","preview":"p"}'),
+  indexed: async () => true,
+  lookup: async () => null,
   ...over,
 })
 
@@ -121,4 +124,59 @@ test('cache miss over the limit is 429 and never reaches n8n', async () => {
   )
   assert.equal(r.status, 429)
   assert.equal(ran, false)
+})
+
+test('cache hit for a repo Ask has not indexed runs the workflow', async () => {
+  let ran = false
+  const r = await generate(
+    { repo: 'https://github.com/a/b', runId: 'r' },
+    gdeps({
+      cacheGet: async () => ({ markdown: 'old', preview: '' }),
+      indexed: async () => false,
+      n8n: async () => {
+        ran = true
+        return new Response('{"markdown":"new"}')
+      },
+    }),
+  )
+  assert.equal(ran, true)
+  assert.equal((r.body as { markdown: string }).markdown, 'new')
+})
+
+test('lookup limit denies before GitHub is called', async () => {
+  let looked = false
+  const r = await generate(
+    { repo: 'https://github.com/a/b', runId: 'r' },
+    gdeps({
+      lookup: async () => ({ status: 429, body: { error: 'Too many requests. Try again in an hour.' }, retryAfter: 3600 }),
+      tree: async () => {
+        looked = true
+        return 'sha1'
+      },
+    }),
+  )
+  assert.equal(r.status, 429)
+  assert.equal(looked, false)
+})
+
+test('the IP limit ignores a client-set X-Forwarded-For', () => {
+  assert.equal(clientIp({ headers: { 'x-forwarded-for': '9.9.9.9' }, socket: { remoteAddress: '1.2.3.4' } }), '1.2.3.4')
+})
+
+test('Supabase unreachable is not an expired session', () => {
+  const failed = (status?: number) => ({ data: { user: null }, error: { message: 'x', status } })
+  assert.throws(() => userFrom(failed(0)))
+  assert.throws(() => userFrom(failed(undefined)))
+  assert.throws(() => userFrom(failed(503)))
+  assert.equal(userFrom(failed(401)), null)
+  assert.equal(userFrom({ data: { user: { id: 'u1' } }, error: null }), 'u1')
+})
+
+test('a request body that fails mid-upload reads as empty instead of throwing', async () => {
+  const broken = new Readable({
+    read() {
+      this.destroy(new Error('aborted'))
+    },
+  })
+  assert.deepEqual(await readJson(broken as never), {})
 })

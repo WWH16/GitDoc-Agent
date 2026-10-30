@@ -38,6 +38,8 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // `vite preview` has no guard, so it gets no proxy (it would otherwise copy server.proxy below)
+    preview: { proxy: {} },
     server: {
       // /api/generate and /api/progress are served by guardPlugin itself
       proxy: {
