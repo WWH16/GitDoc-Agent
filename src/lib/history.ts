@@ -43,6 +43,16 @@ export async function listGenerations(): Promise<Generation[]> {
   return (data as Row[]).map(toGeneration)
 }
 
+/** How many docs and chats this user has (for "Keep your 3 docs and 2 chats"). */
+export async function countHistory(): Promise<{ docs: number; chats: number }> {
+  await accessToken()
+  const [docs, chats] = await Promise.all([
+    supabase.from('generations').select('id', { count: 'exact', head: true }),
+    supabase.from('chats').select('repo', { count: 'exact', head: true }),
+  ])
+  return { docs: docs.count ?? 0, chats: chats.count ?? 0 }
+}
+
 export async function loadGeneration(id: string): Promise<Generation> {
   await accessToken()
   const { data, error } = await supabase

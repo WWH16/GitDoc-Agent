@@ -6,6 +6,12 @@ export const URL_PLACEHOLDER = 'https://github.com/<username>/<repo-name>'
 export const accountState = (user: { is_anonymous?: boolean; email?: string } | null): 'none' | 'anonymous' | 'saved' =>
   !user ? 'none' : user.is_anonymous ? 'anonymous' : 'saved'
 
+/** "3 docs and 1 chat": what this browser keeps by saving its history, or loses by signing in to another account. */
+export function historySummary({ docs, chats }: { docs: number; chats: number }): string {
+  const part = (n: number, word: string) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '')
+  return [part(docs, 'doc'), part(chats, 'chat')].filter(Boolean).join(' and ')
+}
+
 /** The repo URL normalized like the n8n workflows do, so each repository has one key however it was typed. */
 export const repoKey = (url: string) => url.trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '')
 

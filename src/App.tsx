@@ -1,9 +1,9 @@
-import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, CloudUpload, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AccountButton } from '@/components/account-dialog'
+import { AccountDialog, AccountMenu, useAccount, type AccountMode } from '@/components/account-dialog'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
 import { ZoomableArticle } from '@/components/zoomable-article'
@@ -112,15 +112,27 @@ export default function App() {
   const [tab, setTab] = useState('generate')
   const [generations, setGenerations] = useState<Generation[] | null>(null)
   const [historyError, setHistoryError] = useState('')
-  // Docs reopened from Run history; the Generate tab shows them
+  // Docs reopened from History; the Generate tab shows them
   const [opened, setOpened] = useState<Generation | null>(null)
+  // A run in progress keeps the Generate tab, so History cannot open other docs into it meanwhile
+  const [running, setRunning] = useState(false)
+  const { user, saved } = useAccount()
+  const accountDialog = useRef<HTMLDialogElement>(null)
+  const [accountMode, setAccountMode] = useState<AccountMode>('save')
+  const [accountOpens, setAccountOpens] = useState(0)
+
+  function openAccount(mode: AccountMode) {
+    setAccountMode(mode)
+    setAccountOpens((n) => n + 1)
+    accountDialog.current?.showModal()
+  }
 
   const refresh = useCallback(async () => {
     try {
       setGenerations(await listGenerations())
       setHistoryError('')
     } catch (e) {
-      setHistoryError(`Could not load run history: ${(e as Error).message}`)
+      setHistoryError(`Couldn't load your history: ${(e as Error).message}`)
     }
   }, [])
 
@@ -146,9 +158,9 @@ export default function App() {
             <TabsList>
               <TabsTrigger value="generate" className="sm:px-3">Generate</TabsTrigger>
               <TabsTrigger value="ask" className="sm:px-3">Ask</TabsTrigger>
-              <TabsTrigger value="history" className="sm:px-3">Run history</TabsTrigger>
+              <TabsTrigger value="history" className="sm:px-3">History</TabsTrigger>
             </TabsList>
-            <AccountButton />
+            <AccountMenu user={user} saved={saved} onSave={() => openAccount('save')} />
             <ThemeToggle />
           </div>
         </div>
@@ -158,15 +170,33 @@ export default function App() {
       <main className="mx-auto w-full max-w-3xl pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] py-6 sm:py-10 xl:max-w-[88rem]">
         {/* forceMount keeps every tab mounted: results, chat and a running generation survive tab switches */}
         <TabsContent value="generate" forceMount className="data-[state=inactive]:hidden">
-          <Generate repo={repo} setRepo={setRepo} opened={opened} onFinished={refresh} />
+          <Generate
+            repo={repo}
+            setRepo={setRepo}
+            opened={opened}
+            onFinished={refresh}
+            onRunningChange={setRunning}
+            unsaved={!saved}
+            onSave={() => openAccount('save')}
+          />
         </TabsContent>
         <TabsContent value="ask" forceMount className="mx-auto w-full max-w-3xl data-[state=inactive]:hidden 2xl:max-w-4xl">
           <Ask repo={repo} setRepo={setRepo} />
         </TabsContent>
         <TabsContent value="history" forceMount className="mx-auto w-full max-w-3xl space-y-6 data-[state=inactive]:hidden sm:space-y-8 xl:max-w-5xl">
-          <History generations={generations} error={historyError} onRefresh={refresh} onOpen={open} />
+          <History
+            generations={generations}
+            error={historyError}
+            onRefresh={refresh}
+            onOpen={open}
+            running={running}
+            unsaved={!saved}
+            onSave={() => openAccount('save')}
+            onGenerate={() => setTab('generate')}
+          />
         </TabsContent>
       </main>
+      <AccountDialog dialog={accountDialog} mode={accountMode} setMode={setAccountMode} opens={accountOpens} />
     </Tabs>
   )
 }
@@ -202,7 +232,16 @@ function ThemeToggle() {
   )
 }
 
-function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: Generation | null; onFinished: () => void }) {
+type GenerateProps = RepoProps & {
+  opened: Generation | null
+  onFinished: () => void
+  onRunningChange: (running: boolean) => void
+  /** The history lives in this browser only, so finished docs come with a prompt to save it */
+  unsaved: boolean
+  onSave: () => void
+}
+
+function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved, onSave }: GenerateProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [step, setStep] = useState<number | null>(null)
   const [nodes, setNodes] = useState<NodeRun[]>([])
@@ -235,6 +274,8 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only a newly opened generation should replace the docs
   }, [opened])
+
+  useEffect(() => onRunningChange(phase === 'running'), [phase, onRunningChange])
 
   // The id this browser gave its current run (not n8n's execution id, which `runId` shows)
   const myRun = useRef('')
@@ -391,7 +432,7 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
           aria-live="polite"
         >
           {phase === 'idle' &&
-            (result ? 'Opened from Run history. Generate again for the latest version.' : 'Paste a public GitHub URL and press Enter.')}
+            (result ? 'Opened from History. Generate again for the latest version.' : 'Paste a public GitHub URL and press Enter.')}
           {phase === 'running' && 'This usually takes a few minutes. Keep this tab open.'}
           {phase === 'done' && (cached ? 'Documentation loaded from cache.' : `Documentation generated in ${clock(elapsed)}.`)}
           {phase === 'partial' && `Documentation generated in ${clock(elapsed)}, but the run failed after that, so Ask may not know this repo. ${error}`}
@@ -400,6 +441,16 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
         {saveError && (
           <p className="text-sm text-warning" role="alert">
             {saveError}
+          </p>
+        )}
+        {/* Asked right after the docs arrive, when they are worth keeping; a line, never a popup */}
+        {finished && unsaved && !saveError && (
+          <p className="text-sm text-muted-foreground">
+            Kept in this browser only.{' '}
+            <button type="button" onClick={onSave} className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              Save history
+            </button>{' '}
+            to open these docs on any device.
           </p>
         )}
       </form>
@@ -600,7 +651,8 @@ function Ask({ repo, setRepo }: RepoProps) {
       )
     } catch (e) {
       const cancelled = ctrl.signal.aborted
-      setFailed({ question: q, message: cancelled ? 'You stopped waiting for this answer.' : (e as Error).message, cancelled })
+      // A late failure for a repo no longer on screen would show under another repo's chat
+      if (shownRef.current === key) setFailed({ question: q, message: cancelled ? 'You stopped waiting for this answer.' : (e as Error).message, cancelled })
     } finally {
       abort.current = null
       setStartedAt(null)
@@ -836,11 +888,19 @@ function History({
   error,
   onRefresh,
   onOpen,
+  running,
+  unsaved,
+  onSave,
+  onGenerate,
 }: {
   generations: Generation[] | null
   error: string
   onRefresh: () => Promise<void>
   onOpen: (g: Generation) => void
+  running: boolean
+  unsaved: boolean
+  onSave: () => void
+  onGenerate: () => void
 }) {
   const [refreshing, setRefreshing] = useState(false)
   const [opening, setOpening] = useState('')
@@ -862,7 +922,7 @@ function History({
     <>
       <div className="flex items-end justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">History</h1>
           <p className="text-sm text-muted-foreground">Your 20 most recent docs. Only you can see them.</p>
         </div>
         <Button variant="outline" size="sm" onClick={async () => { setRefreshing(true); await onRefresh(); setRefreshing(false) }}
@@ -871,6 +931,21 @@ function History({
           <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
+
+      {/* The docs are on screen, so this is where losing them means something */}
+      {unsaved && !!generations?.length && (
+        <div className="flex flex-col gap-3 rounded-2xl border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+          <CloudOff className="hidden size-5 shrink-0 text-muted-foreground sm:block" aria-hidden />
+          <p className="flex-1 text-sm">
+            <span className="font-medium">Only this browser has these docs.</span>{' '}
+            <span className="text-muted-foreground">Clearing its data or switching devices loses them.</span>
+          </p>
+          <Button size="sm" onClick={onSave} className="self-start sm:self-auto">
+            <CloudUpload />
+            Save history
+          </Button>
+        </div>
+      )}
 
       {openError && (
         <p className="text-sm text-destructive" role="alert">
@@ -884,7 +959,14 @@ function History({
         ) : generations === null ? (
           <p className="px-6 py-10 text-center text-sm text-muted-foreground">Loading…</p>
         ) : generations.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-muted-foreground">No docs yet. Generate docs to see them here.</p>
+          <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+            <FileText className="size-6 text-muted-foreground" aria-hidden />
+            <p className="font-medium">No docs yet</p>
+            <p className="max-w-xs text-sm text-muted-foreground">Docs you generate show up here, ready to open again.</p>
+            <Button size="sm" className="mt-2" onClick={onGenerate}>
+              Generate docs
+            </Button>
+          </div>
         ) : (
           <Table>
             <TableHeader className="bg-muted/50">
@@ -917,7 +999,8 @@ function History({
                       variant="outline"
                       size="sm"
                       onClick={() => open(g.id)}
-                      disabled={!!opening}
+                      disabled={!!opening || running}
+                      title={running ? 'Available when the current run finishes' : undefined}
                       aria-label={`Open docs for ${repoName(g.repo)}`}
                     >
                       {opening === g.id && <Loader2 className="animate-spin" />}

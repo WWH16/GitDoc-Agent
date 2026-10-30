@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, accountState, currentStep, repoKey, setTokenSource } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, accountState, currentStep, historySummary, repoKey, setTokenSource } from './api.ts'
 import { showProgressHint, timeline, toProgress } from './progress.ts'
 
 const reply = (status: number, body: unknown) => {
@@ -143,4 +143,11 @@ test('accountState tells anonymous from saved users', () => {
   assert.equal(accountState(null), 'none')
   assert.equal(accountState({ is_anonymous: true }), 'anonymous')
   assert.equal(accountState({ is_anonymous: false, email: 'a@b.c' }), 'saved')
+})
+
+test('historySummary counts what this browser keeps or loses', () => {
+  assert.equal(historySummary({ docs: 3, chats: 1 }), '3 docs and 1 chat')
+  assert.equal(historySummary({ docs: 1, chats: 0 }), '1 doc')
+  assert.equal(historySummary({ docs: 0, chats: 2 }), '2 chats')
+  assert.equal(historySummary({ docs: 0, chats: 0 }), '')
 })
