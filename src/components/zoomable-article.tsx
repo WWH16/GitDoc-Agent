@@ -28,10 +28,20 @@ function intrinsicSize(img: HTMLImageElement) {
   return { w: img.naturalWidth || r.width, h: img.naturalHeight || r.height }
 }
 
-/** Rendered Markdown whose images open in an in-page viewer with zoom and pan. */
-export function ZoomableArticle({ html, className }: { html: string; className?: string }) {
+/** Rendered Markdown (src/lib/markdown.ts) whose images open in an in-page viewer with zoom and pan, and whose code
+ *  blocks copy. With `outline`, a document of three or more sections opens with a contents list. */
+export function ZoomableArticle({ html, className, outline = false }: { html: string; className?: string; outline?: boolean }) {
   const article = useRef<HTMLElement>(null)
   const [shown, setShown] = useState<Shown | null>(null)
+  const [sections, setSections] = useState<{ id: string; text: string }[]>([])
+
+  useEffect(() => {
+    // The document's top section level: generated docs use h2 or h3 under their h1
+    const el = article.current
+    const level = el?.querySelector('h2[id]') ? 'h2[id]' : 'h3[id]'
+    const heads = [...(el?.querySelectorAll(level) ?? [])]
+    setSections(heads.map((h) => ({ id: h.id, text: h.textContent ?? '' })))
+  }, [html])
 
   // Images come from sanitized HTML, so make them reachable by keyboard here
   useEffect(() => {
@@ -51,15 +61,48 @@ export function ZoomableArticle({ html, className }: { html: string; className?:
     setShown({ src: target.src, alt: target.alt || 'Diagram', ...intrinsicSize(target) })
   }
 
+  // The copy buttons come from the HTML, so one listener on the article serves them all
+  function copy(target: EventTarget) {
+    const button = target instanceof Element ? target.closest<HTMLButtonElement>('[data-copy]') : null
+    const code = button?.closest('.md-code')?.querySelector('code')
+    if (!button || !code) return
+    navigator.clipboard.writeText(code.textContent ?? '').then(
+      () => {
+        button.textContent = 'Copied'
+        setTimeout(() => (button.textContent = 'Copy'), 1500)
+      },
+      // Clipboard blocked: select the code so Ctrl+C still works
+      () => getSelection()?.selectAllChildren(code),
+    )
+  }
+
   return (
     <>
+      {outline && sections.length >= 3 && (
+        // Lines up with the docs' text column (WIDE_PROSE in App.tsx)
+        <details className="mb-6 ml-[max(0px,calc((100%-46rem)/2))] max-w-[70ch] rounded-xl border px-4 py-3 text-sm xl:ml-0 [&[open]>summary]:mb-2">
+          <summary className="cursor-pointer font-medium select-none">Contents, {sections.length} sections</summary>
+          <ol className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
+            {sections.map((s) => (
+              <li key={s.id} className="min-w-0">
+                <a href={`#${s.id}`} className="block truncate rounded-sm text-muted-foreground hover:text-foreground">
+                  {s.text}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
       <article
         ref={article}
         className={cn(
           '[&_img]:mx-auto [&_img]:block [&_img]:h-auto [&_img]:cursor-zoom-in [&_img]:rounded-xl [&_img]:outline-offset-4 [&_img:hover]:outline-2 [&_img:hover]:outline-border [&_img:focus-visible]:outline-2 [&_img:focus-visible]:outline-ring',
           className,
         )}
-        onClick={(e) => open(e.target)}
+        onClick={(e) => {
+          open(e.target)
+          copy(e.target)
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             if (e.target instanceof HTMLImageElement) e.preventDefault()

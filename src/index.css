@@ -118,3 +118,133 @@
   animation: none;
   mix-blend-mode: normal;
 }
+
+/* Rendered markdown (src/lib/markdown.ts): highlighted code with a language and copy bar, framed tables */
+:root {
+  --code-keyword: oklch(0.5 0.16 30);
+  --code-string: oklch(0.47 0.12 150);
+  --code-number: oklch(0.5 0.12 65);
+  --code-title: oklch(0.47 0.13 250);
+  --code-attr: oklch(0.48 0.1 200);
+}
+.dark {
+  --code-keyword: oklch(0.76 0.14 35);
+  --code-string: oklch(0.78 0.13 150);
+  --code-number: oklch(0.8 0.12 75);
+  --code-title: oklch(0.78 0.11 250);
+  --code-attr: oklch(0.79 0.09 200);
+}
+
+/* Unlayered, so these beat the typography plugin's pre and table styles */
+  .md-code {
+    margin-block: 1.5em;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--muted);
+  }
+  .md-code > pre {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--foreground);
+  }
+  .md-code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.25rem 0.5rem 0.25rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+  }
+  .md-code-bar button {
+    min-height: 2rem;
+    padding-inline: 0.75rem;
+    border-radius: 999px;
+    color: var(--foreground);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .md-code-bar button:hover {
+    background: var(--accent);
+  }
+  .md-code-bar button:active {
+    opacity: 0.7;
+  }
+  .md-code-bar button:focus-visible,
+  .md-table:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* A wide or long table scrolls inside its frame; the header row stays in view */
+  .md-table {
+    margin-block: 1.5em;
+    max-height: 70vh;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+  }
+  .md-table > table {
+    margin: 0;
+    min-width: 100%;
+    font-size: 0.875em;
+  }
+  .md-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--muted);
+    white-space: nowrap;
+  }
+  .md-table :is(th, td) {
+    padding: 0.6em 1em;
+  }
+  .md-table tbody tr:nth-child(even) {
+    background: color-mix(in oklab, var(--muted) 50%, transparent);
+  }
+  .prose :is(h2, h3)[id] {
+    scroll-margin-top: 8rem;
+  }
+
+  .hljs-comment,
+  .hljs-quote,
+  .hljs-meta {
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-built_in,
+  .hljs-deletion {
+    color: var(--code-keyword);
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-addition,
+  .hljs-template-tag {
+    color: var(--code-string);
+  }
+  .hljs-number,
+  .hljs-literal,
+  .hljs-symbol,
+  .hljs-bullet {
+    color: var(--code-number);
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-name {
+    color: var(--code-title);
+  }
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-type,
+  .hljs-property,
+  .hljs-variable,
+  .hljs-selector-class,
+  .hljs-tag {
+    color: var(--code-attr);
+  }

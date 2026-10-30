@@ -28,6 +28,7 @@ import {
   type Turn,
 } from './api'
 import { deleteChat, loadChat, saveChat, type Message } from './lib/chats'
+import { renderMarkdown } from './lib/markdown'
 import { countHistory, listGenerations, loadGeneration, saveGeneration, type Generation } from './lib/history'
 import { showProgressHint, type NodeRun, type Progress as RunProgress } from './progress'
 
@@ -61,20 +62,14 @@ const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixe
 
 // Rendered markdown (docs preview and chat answers) reads at body size; inline code drops the backticks
 const PROSE =
-  'prose prose-base prose-neutral max-w-none break-words dark:prose-invert prose-headings:tracking-tight prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-img:mx-auto prose-pre:border prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none prose-table:block prose-table:overflow-x-auto'
+  'prose prose-base prose-neutral max-w-none break-words dark:prose-invert prose-headings:tracking-tight prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-img:mx-auto prose-code:before:content-none prose-code:after:content-none'
 
 // The page column (46rem) inside the wide documentation card: text starts on the same left edge as the form and run
 // card above and stops at a 70ch measure; diagrams, code and tables break out to the card's full width.
 // (Class names are written out in full: Tailwind only finds literal strings.)
 // From 1280px the docs sit in their own pane, so text starts at the pane's edge instead.
 const WIDE_PROSE =
-  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] xl:[&>*]:ml-0 [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>pre]:ml-0 [&>pre]:max-w-none [&>table]:ml-0 [&>table]:max-w-none'
-
-// Markdown libs (~25 KB gzip) load on first use. DOMPurify keeps data: URLs on <img>, so rendered diagrams survive.
-async function renderMarkdown(md: string) {
-  const [{ marked }, { default: DOMPurify }] = await Promise.all([import('marked'), import('dompurify')])
-  return DOMPurify.sanitize(marked.parse(md, { async: false }))
-}
+  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] xl:[&>*]:ml-0 [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>.md-code]:ml-0 [&>.md-code]:max-w-none [&>.md-table]:ml-0 [&>.md-table]:max-w-none'
 
 // localStorage helpers: the repo, last docs and Ask chat survive leaving the app (e.g. for the landing page) or a reload.
 // Failures are ignored: private mode, blocked storage, or very large docs over the ~5 MB quota just aren't saved.
@@ -515,7 +510,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
             </CardAction>
           </CardHeader>
           <CardContent>
-            <ZoomableArticle html={html} className={cn(PROSE, WIDE_PROSE)} />
+            <ZoomableArticle html={html} outline className={cn(PROSE, WIDE_PROSE)} />
           </CardContent>
         </Card>
       ) : (
