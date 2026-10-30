@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
+import { guardPlugin } from './server/guard.ts'
 
 // Reads .env in this folder. No VITE_ prefix, so tokens stay in this dev proxy and never reach the browser.
 export default defineConfig(({ mode }) => {
@@ -21,7 +22,8 @@ export default defineConfig(({ mode }) => {
   })
 
   return {
-    plugins: [react(), tailwindcss()],
+    // guardPlugin checks the session and rate limits before the proxy below forwards /api calls
+    plugins: [react(), tailwindcss(), guardPlugin(env)],
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     // Two pages: the landing page at / and the app at /app/
     build: {
