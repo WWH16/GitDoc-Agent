@@ -4,7 +4,10 @@ import { accessToken, supabase } from './supabase'
 // `repo` is always a repoKey (src/api.ts).
 
 // `text` is the raw answer sent back as history; chats saved before it existed only have `html`
-export type Message = { role: 'user'; text: string } | { role: 'assistant'; html: string; text?: string; sources: string[] }
+// `stopped`: the person pressed Stop before the answer came. The app wrote that reply, so it is never sent as history.
+export type Message =
+  | { role: 'user'; text: string }
+  | { role: 'assistant'; html: string; text?: string; sources: string[]; stopped?: boolean }
 
 export async function loadChat(repo: string): Promise<{ sessionId: string; messages: Message[] } | null> {
   await accessToken()

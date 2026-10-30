@@ -1,4 +1,4 @@
-import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, Maximize2, RefreshCw, SquarePen } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, Maximize2, RefreshCw, Square, SquarePen } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -578,7 +578,7 @@ const UNDO_MS = 8000
 const SUGGESTIONS = ['What does this project do?', 'Where is authentication handled?', 'Explain the database models']
 
 // A question that got no answer: kept so it can be asked again without retyping
-type Failure = { question: string; message: string; cancelled: boolean }
+type Failure = { question: string; message: string }
 
 // Answers can take minutes on the free tier; the wait message changes so a long wait never looks stuck
 const waitMessage = (s: number) =>
@@ -680,7 +680,8 @@ function Ask({ repo, setRepo }: RepoProps) {
     const ctrl = new AbortController()
     abort.current = ctrl
     try {
-      const { answer, sources } = await askRepo(repo.trim(), q, sessionId, prior.map(toTurn), ctrl.signal)
+      const turns = prior.filter((m) => m.role === 'user' || !m.stopped).map(toTurn)
+      const { answer, sources } = await askRepo(repo.trim(), q, sessionId, turns, ctrl.signal)
       const html = await renderMarkdown(answer)
       const chat: Message[] = [...asked, { role: 'assistant', html, text: answer, sources }]
       // The answer belongs to the repo it was asked about, even if the URL changed while waiting
@@ -691,9 +692,14 @@ function Ask({ repo, setRepo }: RepoProps) {
         () => setSaveError('Couldn’t save this chat. Its newest messages will be gone after a reload.'),
       )
     } catch (e) {
-      const cancelled = ctrl.signal.aborted
       // A late failure for a repo no longer on screen would show under another repo's chat
-      if (shownRef.current === key) setFailed({ question: q, message: cancelled ? 'You stopped waiting for this answer.' : (e as Error).message, cancelled })
+      if (shownRef.current !== key) return
+      if (ctrl.signal.aborted) {
+        // Stop: the app answers in the agent's place, and the chat keeps it
+        const chat: Message[] = [...asked, { role: 'assistant', html: '', sources: [], stopped: true }]
+        setMessages(chat)
+        saveChat(key, sessionId, chat).catch(() => {})
+      } else setFailed({ question: q, message: (e as Error).message })
     } finally {
       abort.current = null
       setStartedAt(null)
@@ -743,15 +749,16 @@ function Ask({ repo, setRepo }: RepoProps) {
         maxLength={MAX_QUESTION}
         className="max-h-48 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-base outline-none [field-sizing:content] placeholder:text-muted-foreground"
       />
-      <Button
-        type="submit"
-        size="icon"
-        className="rounded-full"
-        disabled={pending || noRepo || !ready || !question.trim()}
-        aria-label="Send"
-      >
-        <ArrowUp />
-      </Button>
+      {/* While an answer is on its way, Send turns into Stop */}
+      {pending ? (
+        <Button type="button" size="icon" className="rounded-full" onClick={() => abort.current?.abort()} aria-label="Stop">
+          <Square className="size-3.5 fill-current" />
+        </Button>
+      ) : (
+        <Button type="submit" size="icon" className="rounded-full" disabled={noRepo || !ready || !question.trim()} aria-label="Send">
+          <ArrowUp />
+        </Button>
+      )}
     </form>
   )
 
@@ -819,9 +826,6 @@ function Ask({ repo, setRepo }: RepoProps) {
                 <span className="tabular-nums" aria-hidden>
                   {clock(waited)}
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => abort.current?.abort()}>
-                  Stop waiting
-                </Button>
               </div>
             )}
 
@@ -833,11 +837,8 @@ function Ask({ repo, setRepo }: RepoProps) {
 
             {failed && (
               <div
-                role={failed.cancelled ? 'status' : 'alert'}
-                className={cn(
-                  'flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3 text-sm',
-                  failed.cancelled ? 'text-muted-foreground' : 'border-destructive/30 bg-destructive/10 text-destructive',
-                )}
+                role="alert"
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
               >
                 <p className="min-w-0 flex-1 break-words">{failed.message}</p>
                 <Button variant="outline" size="sm" onClick={() => send(failed.question, true)} disabled={noRepo}>
@@ -870,6 +871,8 @@ const MessageList = memo(function MessageList({ messages }: { messages: Message[
               <span className="sr-only">You: </span>
               {m.text}
             </p>
+          ) : m.stopped ? (
+            <p className="text-sm text-muted-foreground">You stopped this answer.</p>
           ) : (
             <div className="space-y-3">
               <p className="sr-only">Answer:</p>
