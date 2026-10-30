@@ -23,7 +23,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     // guardPlugin checks the session and rate limits before the proxy below forwards /api calls
-    plugins: [react(), tailwindcss(), guardPlugin({ ...env, N8N_URL: n8n, N8N_WORKFLOW_ID: workflowId })],
+    plugins: [
+      react(),
+      tailwindcss(),
+      guardPlugin({ ...env, N8N_URL: n8n, N8N_WORKFLOW_ID: workflowId, N8N_WEBHOOK_PATH: webhookPath }),
+    ],
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     // Two pages: the landing page at / and the app at /app/
     build: {
@@ -35,8 +39,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // /api/generate and /api/progress are served by guardPlugin itself
       proxy: {
-        '/api/generate': hook(webhookPath, 300_000),
         // Ask can take 2+ minutes: each Gemini call on the free tier takes ~20 s and the agent makes several
         '/api/ask': hook(askPath, 300_000),
       },

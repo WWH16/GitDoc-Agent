@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Execution } from '../src/progress.ts'
-import { guard, progressFor, type Deps, type GuardError, type Rule } from './guard.ts'
+import { generate, guard, progressFor, type Deps, type GenerateDeps, type GuardError, type Rule } from './guard.ts'
 
 const req = (path: string) => ({ path, ip: '1.2.3.4', authorization: 'Bearer t' })
 const deps = (over: Partial<Deps> = {}): Deps => ({ verify: async () => 'u1', hit: async () => null, ...over })
@@ -54,3 +54,71 @@ test('progress returns only the matching run timeline', async () => {
 })
 
 test('unknown runId is 404', async () => assert.equal(await progressFor('nope', async () => [exec('7', 'r2')]), null))
+
+const gdeps = (over: Partial<GenerateDeps> = {}): GenerateDeps => ({
+  tree: async () => 'sha1',
+  cacheGet: async () => null,
+  cachePut: async () => {},
+  limit: async () => null,
+  n8n: async () => new Response('{"markdown":"m","preview":"p"}'),
+  ...over,
+})
+
+test('cache hit skips the limit and n8n', async () => {
+  let called = 0
+  const r = await generate(
+    { repo: 'https://github.com/a/b', runId: 'r' },
+    gdeps({
+      cacheGet: async () => ({ markdown: 'm', preview: 'p' }),
+      limit: async () => {
+        called++
+        return null
+      },
+      n8n: async () => {
+        called++
+        return new Response('{}')
+      },
+    }),
+  )
+  assert.deepEqual(r.body, { markdown: 'm', preview: 'p', cached: true })
+  assert.equal(called, 0)
+})
+
+test('fresh bypasses the cache and stores the new docs', async () => {
+  let stored = ''
+  await generate(
+    { repo: 'https://github.com/a/b', runId: 'r', fresh: true },
+    gdeps({
+      cacheGet: async () => ({ markdown: 'old', preview: '' }),
+      cachePut: async (_r, _s, d) => {
+        stored = d.markdown
+      },
+      n8n: async () => new Response('{"markdown":"new","preview":"p"}'),
+    }),
+  )
+  assert.equal(stored, 'new')
+})
+
+test('no tree sha means no cache, normal run', async () => {
+  const r = await generate(
+    { repo: 'https://github.com/a/b', runId: 'r' },
+    gdeps({ tree: async () => null, n8n: async () => new Response('{"markdown":"m"}') }),
+  )
+  assert.equal((r.body as { markdown: string }).markdown, 'm')
+})
+
+test('cache miss over the limit is 429 and never reaches n8n', async () => {
+  let ran = false
+  const r = await generate(
+    { repo: 'https://github.com/a/b', runId: 'r' },
+    gdeps({
+      limit: async () => ({ status: 429, body: { error: 'Too many requests. Try again in an hour.' }, retryAfter: 3600 }),
+      n8n: async () => {
+        ran = true
+        return new Response('{}')
+      },
+    }),
+  )
+  assert.equal(r.status, 429)
+  assert.equal(ran, false)
+})

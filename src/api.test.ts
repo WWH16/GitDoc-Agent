@@ -69,7 +69,9 @@ test('askRepo keeps only string sources', async () => {
 
 test('callWorkflow requires markdown and falls back to it for preview', async () => {
   reply(200, { markdown: '# Doc' })
-  assert.deepEqual(await callWorkflow('r', 'run1'), { markdown: '# Doc', preview: '# Doc' })
+  assert.deepEqual(await callWorkflow('r', 'run1'), { markdown: '# Doc', preview: '# Doc', cached: false })
+  reply(200, { markdown: '# Doc', preview: 'p', cached: true })
+  assert.equal((await callWorkflow('r', 'run1')).cached, true)
   reply(200, { preview: 'x' })
   await assert.rejects(callWorkflow('r', 'run1'))
 })

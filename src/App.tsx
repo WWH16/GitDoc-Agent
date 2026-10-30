@@ -1,5 +1,5 @@
 import { ArrowUp, Check, ChevronDown, CircleX, Download, FileCode, FileText, Loader2, Monitor, Moon, RefreshCw, SquarePen, Sun } from 'lucide-react'
-import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -210,6 +210,8 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
   const [html, setHtml] = useState('')
   const [error, setError] = useState('')
   const [saveError, setSaveError] = useState('')
+  // The docs came from the shared cache: the repository had not changed since they were generated, so nothing ran
+  const [cached, setCached] = useState(false)
 
   // Docs opened from Run history replace what this tab shows, unless a run is going (it keeps the tab)
   useEffect(() => {
@@ -222,6 +224,7 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
       setRunId('')
       setError('')
       setSaveError('')
+      setCached(false)
       setResult({ markdown: opened.markdown, preview: opened.preview })
       setHtml(h)
     })
@@ -268,8 +271,7 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
     return () => clearInterval(id)
   }, [phase])
 
-  async function generate(e: FormEvent) {
-    e.preventDefault()
+  async function generate(fresh = false) {
     const url = repo.trim()
     if (!url) {
       setPhase('error')
@@ -283,14 +285,16 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
     setElapsed(0)
     setError('')
     setSaveError('')
+    setCached(false)
     setResult(null)
     // A random id for this run: the server finds our execution by it, and nobody else knows it
     const run = (myRun.current = crypto.randomUUID())
-    let res: Result
+    let res: Result & { cached: boolean }
     try {
-      res = await callWorkflow(url, run)
+      res = await callWorkflow(url, run, fresh)
       setHtml(await renderMarkdown(res.preview))
       setResult(res)
+      setCached(res.cached)
     } catch (e) {
       setError((e as Error).message)
       setPhase('error')
@@ -298,9 +302,9 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
       getProgress(run).then(applyProgress).catch(() => {})
       return
     }
-    // "Return Documentation" answers before the last node runs, so wait for the execution to end.
+    // "Return Documentation" answers before the last node runs, so wait for the execution to end. Cached docs had no run.
     let p: RunProgress | null = null
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 100 && !res.cached; i++) {
       p = await getProgress(run).catch(() => null)
       if (p && p.status !== 'running') break
       await new Promise((r) => setTimeout(r, 3000))
@@ -353,7 +357,13 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
         <p className="text-sm text-muted-foreground">Turn any GitHub repository into readable docs with diagrams.</p>
       </div>
 
-      <form onSubmit={generate} className="space-y-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          generate()
+        }}
+        className="space-y-2"
+      >
         <label htmlFor="repo" className="block text-sm font-medium">
           Repository URL
         </label>
@@ -381,7 +391,7 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
           {phase === 'idle' &&
             (result ? 'Opened from Run history. Generate again for the latest version.' : 'Paste a public GitHub URL and press Enter.')}
           {phase === 'running' && 'This usually takes a few minutes. Keep this tab open.'}
-          {phase === 'done' && `Documentation generated in ${clock(elapsed)}.`}
+          {phase === 'done' && (cached ? 'Documentation loaded from cache.' : `Documentation generated in ${clock(elapsed)}.`)}
           {phase === 'partial' && `Documentation generated in ${clock(elapsed)}, but the run failed after that, so Ask may not know this repo. ${error}`}
           {phase === 'error' && error}
         </p>
@@ -396,7 +406,9 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
         <Card>
           <CardHeader>
             <CardTitle>Run</CardTitle>
-            <CardDescription>{runId ? `Execution #${runId}` : 'Waiting for execution ID…'}</CardDescription>
+            <CardDescription>
+              {cached ? 'Cached docs, no workflow run' : runId ? `Execution #${runId}` : 'Waiting for execution ID…'}
+            </CardDescription>
             <CardAction>
               <Badge variant="outline" className={cn('capitalize', TONE[STATUS_TONE[status] ?? 'neutral'])}>{status}</Badge>
             </CardAction>
@@ -446,8 +458,17 @@ function Generate({ repo, setRepo, opened, onFinished }: RepoProps & { opened: G
           {/* Side padding puts the title and Download button on the page column's edges, like the cards above */}
           <CardHeader className="border-b sm:px-[max(1.5rem,calc((100%-46rem)/2))] xl:sticky xl:top-14 xl:z-[1] xl:-mt-6 xl:rounded-t-2xl xl:bg-card xl:px-6 xl:pt-6">
             <CardTitle>Documentation</CardTitle>
-            <CardDescription>Preview of the generated DOCUMENTATION.md. Select a diagram to enlarge it.</CardDescription>
-            <CardAction>
+            <CardDescription>
+              {cached && <span className="block font-medium text-foreground">Loaded from cache</span>}
+              {cached
+                ? 'The repository has not changed since these docs were made. Regenerate for a fresh run.'
+                : 'Preview of the generated DOCUMENTATION.md. Select a diagram to enlarge it.'}
+            </CardDescription>
+            <CardAction className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => generate(true)} disabled={phase === 'running' || !repo.trim()}>
+                <RefreshCw />
+                <span className="sr-only sm:not-sr-only">Regenerate</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={download}>
                 <Download />
                 Download .md

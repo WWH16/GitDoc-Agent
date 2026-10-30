@@ -64,12 +64,14 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
   return data
 }
 
-/** `runId` is a random id the browser makes; only it can later read this run's progress. */
-export async function callWorkflow(repo: string, runId: string): Promise<Result> {
-  const data = await post('/api/generate', { repo, runId })
+/** `runId` is a random id the browser makes; only it can later read this run's progress. `cached` docs come from an
+ *  earlier run on the same repository files, so no run happened. `fresh` skips that cache. */
+export async function callWorkflow(repo: string, runId: string, fresh = false): Promise<Result & { cached: boolean }> {
+  const data = await post('/api/generate', { repo, runId, fresh })
   if (typeof data.markdown !== 'string') throw new Error('The workflow returned no documentation.')
   // Without a preview, fall back to the raw markdown (diagrams stay as code blocks)
-  return { markdown: data.markdown, preview: typeof data.preview === 'string' ? data.preview : data.markdown }
+  const preview = typeof data.preview === 'string' ? data.preview : data.markdown
+  return { markdown: data.markdown, preview, cached: data.cached === true }
 }
 
 export const MAX_QUESTION = 1000
