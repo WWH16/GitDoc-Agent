@@ -1,6 +1,8 @@
 import { Minus, Plus, Scan, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useDark } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
+import { drawDiagram } from '@/lib/diagrams'
 import { cn } from '@/lib/utils'
 
 type View = { scale: number; x: number; y: number }
@@ -26,6 +28,17 @@ function intrinsicSize(img: HTMLImageElement) {
   }
   const r = img.getBoundingClientRect()
   return { w: img.naturalWidth || r.width, h: img.naturalHeight || r.height }
+}
+
+/** Makes an image in the docs open the viewer from the keyboard, at the size it was drawn. */
+function prepare(img: HTMLImageElement, label: string) {
+  img.tabIndex = 0
+  img.setAttribute('role', 'button')
+  img.setAttribute('aria-label', `Enlarge ${label}`)
+  // Mermaid SVGs are width="100%" and would stretch to any container. Show them at the size they were drawn,
+  // never wider than the column and never taller than 70% of the screen; the viewer is there for detail.
+  const { w, h } = intrinsicSize(img)
+  if (w > 0 && h > 0) img.style.width = `min(100%, ${w}px, ${(70 * w) / h}vh)`
 }
 
 // Open full-screen dialogs. Counted, not saved and restored: a diagram viewer inside the docs viewer can close in
@@ -151,16 +164,35 @@ export function ZoomableArticle({ html, className, outline }: { html: string; cl
 
   // Images come from sanitized HTML, so make them reachable by keyboard here
   useEffect(() => {
-    article.current?.querySelectorAll('img').forEach((img, i) => {
-      img.tabIndex = 0
-      img.setAttribute('role', 'button')
-      img.setAttribute('aria-label', `Enlarge ${img.alt || `image ${i + 1}`}`)
-      // Mermaid SVGs are width="100%" and would stretch to any container. Show them at the size they were drawn,
-      // never wider than the column and never taller than 70% of the screen; the viewer is there for detail.
-      const { w, h } = intrinsicSize(img)
-      if (w > 0 && h > 0) img.style.width = `min(100%, ${w}px, ${(70 * w) / h}vh)`
-    })
+    article.current?.querySelectorAll('img').forEach((img, i) => prepare(img, img.alt || `image ${i + 1}`))
   }, [html])
+
+  // Diagrams (marked by markdown.ts) are drawn in the current theme, and again when it changes. One that can't be
+  // drawn shows the workflow's drawing if there is one, else its code.
+  const dark = useDark()
+  useEffect(() => {
+    let current = true
+    article.current?.querySelectorAll<HTMLElement>('.md-mermaid').forEach((box, i) => {
+      const show = (src: string) => {
+        if (!current) return
+        const img = box.querySelector('img') ?? box.insertAdjacentElement('afterbegin', document.createElement('img'))
+        if (!(img instanceof HTMLImageElement)) return
+        img.src = src
+        img.alt = `Diagram ${i + 1}`
+        prepare(img, img.alt)
+        box.dataset.state = 'drawn'
+      }
+      drawDiagram(box.querySelector('code')?.textContent ?? '', dark).then(show, () => {
+        if (box.dataset.fallback) return show(box.dataset.fallback)
+        if (!current) return
+        box.dataset.state = 'failed'
+        box.querySelector('.md-mermaid-note')!.textContent = 'This diagram could not be drawn, so its code is shown instead.'
+      })
+    })
+    return () => {
+      current = false
+    }
+  }, [html, dark])
 
   function open(target: EventTarget) {
     if (!(target instanceof HTMLImageElement)) return

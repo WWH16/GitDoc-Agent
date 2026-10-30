@@ -211,6 +211,19 @@
   .md-table tbody tr:nth-child(even) {
     background: color-mix(in oklab, var(--muted) 50%, transparent);
   }
+  /* A diagram (src/lib/diagrams.ts): its code hides while it is drawn and once it is, and shows if drawing fails */
+  .md-mermaid {
+    margin-block: 1.5em;
+  }
+  .md-mermaid:not([data-state="failed"]) > .md-code,
+  .md-mermaid[data-state="drawn"] > .md-mermaid-note {
+    display: none;
+  }
+  .prose .md-mermaid-note {
+    margin: 0;
+    font-size: 0.875em;
+    color: var(--muted-foreground);
+  }
   .prose :is(h2, h3, h4)[id] {
     scroll-margin-top: var(--heading-offset, 6rem);
   }

@@ -70,7 +70,7 @@ const PROSE =
 // (Class names are written out in full: Tailwind only finds literal strings.)
 // From 1280px the docs sit in their own pane, so text starts at the pane's edge instead.
 const WIDE_PROSE =
-  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] xl:[&>*]:ml-0 [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>.md-code]:ml-0 [&>.md-code]:max-w-none [&>.md-table]:ml-0 [&>.md-table]:max-w-none'
+  '[&>*]:ml-[max(0px,calc((100%-46rem)/2))] xl:[&>*]:ml-0 [&>*]:max-w-[70ch] [&>p:has(>img)]:ml-0 [&>p:has(>img)]:max-w-none [&>.md-code]:ml-0 [&>.md-code]:max-w-none [&>.md-table]:ml-0 [&>.md-table]:max-w-none [&>.md-mermaid]:ml-0 [&>.md-mermaid]:max-w-none'
 
 // localStorage helpers: the repo, last docs and Ask chat survive leaving the app (e.g. for the landing page) or a reload.
 // Failures are ignored: private mode, blocked storage, or very large docs over the ~5 MB quota just aren't saved.
@@ -260,7 +260,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
   useEffect(() => {
     if (!opened || phase === 'running') return
     let current = true
-    renderMarkdown(opened.preview).then((h) => {
+    renderMarkdown(opened.markdown, opened.preview).then((h) => {
       if (!current) return
       setPhase('idle')
       setNodes([])
@@ -337,7 +337,7 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
     let res: Result & { cached: boolean }
     try {
       res = await callWorkflow(url, run, fresh)
-      setHtml(await renderMarkdown(res.preview))
+      setHtml(await renderMarkdown(res.markdown, res.preview))
       setResult(res)
       setCached(res.cached)
     } catch (e) {
