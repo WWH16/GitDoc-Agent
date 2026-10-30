@@ -126,6 +126,9 @@
   --code-number: oklch(0.5 0.12 65);
   --code-title: oklch(0.47 0.13 250);
   --code-attr: oklch(0.48 0.1 200);
+  /* Inline code: a dark chip in both themes */
+  --code-chip: oklch(0.24 0.012 250);
+  --code-chip-ink: oklch(0.96 0 0);
 }
 .dark {
   --code-keyword: oklch(0.76 0.14 35);
@@ -133,6 +136,7 @@
   --code-number: oklch(0.8 0.12 75);
   --code-title: oklch(0.78 0.11 250);
   --code-attr: oklch(0.79 0.09 200);
+  --code-chip: oklch(0.32 0.012 250);
 }
 
 /* Unlayered, so these beat the typography plugin's pre and table styles */
@@ -248,3 +252,14 @@
   .hljs-tag {
     color: var(--code-attr);
   }
+
+/* Inline code in rendered markdown (file names, versions, commands) */
+.prose :not(pre) > code {
+  padding: 0.15em 0.45em;
+  border-radius: 0.375rem;
+  background: var(--code-chip);
+  color: var(--code-chip-ink);
+  font-size: 0.82em;
+  font-weight: 500;
+  box-decoration-break: clone;
+}
