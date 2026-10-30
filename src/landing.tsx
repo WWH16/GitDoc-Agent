@@ -104,44 +104,37 @@ function Header() {
   )
 }
 
-/** A region of a capture: `x`, `y` and `w` in the capture's CSS pixels (`base` wide, `tall` high), shown in a frame at
- *  `ratio`. Captures are 2x. */
-type Crop = { file: string; x?: number; y?: number; w: number; ratio: number; base?: number; tall?: number }
+// Pixel sizes of the 2x captures in public/landing: a 1440 x 900 screen, a 390 x 844 phone
+const SCREEN = [2880, 1800] as const
+const PHONE = [780, 1688] as const
 
-/** A screenshot of the running app, cropped. Below 40rem the `phone` crop (a 390px-wide capture) replaces it,
- *  so a phone never gets a picture of words too small to read. */
+/** A whole screenshot of the running app, never cropped or zoomed. Below 40rem the `phone` capture takes its place. */
 function Shot({
   name,
   alt,
-  desktop,
+  size = SCREEN,
   phone,
   priority = false,
   className,
 }: {
   name: string
   alt: string
-  desktop: Crop
-  phone?: Crop
+  size?: readonly [number, number]
+  phone?: string
   priority?: boolean
   className?: string
 }) {
   const small = usePhone()
-  const { file, x = 0, y = 0, w, ratio, base = 1440, tall = base === 1440 ? 900 : 844 } = small && phone ? phone : desktop
-  const img: CSSProperties = {
-    position: 'absolute',
-    width: `${(base / w) * 100}%`,
-    left: `${(-x / w) * 100}%`,
-    top: `${(-y / (w / ratio)) * 100}%`,
-  }
+  const file = small && phone ? phone : name
+  const [width, height] = small && phone ? PHONE : size
   return (
-    <figure className={cn('shot', className)} style={{ aspectRatio: ratio }} data-slot={name} data-kind="product" data-alt={alt}>
+    <figure className={cn('shot', className)} data-slot={name}>
       <img
         key={file}
         src={`/landing/${file}-${DARK ? 'dark' : 'light'}.webp`}
         alt={alt}
-        width={base * 2}
-        height={tall * 2}
-        style={img}
+        width={width}
+        height={height}
         loading={priority ? 'eager' : 'lazy'}
         fetchPriority={priority ? 'high' : 'auto'}
         decoding="async"
@@ -150,7 +143,7 @@ function Shot({
   )
 }
 
-// Stage: the head on about five and a half columns, the product on the rest
+// Stage: the head beside the whole Generate screen, centred in the first screen
 function Hero() {
   return (
     <section id="top" className="pt-16 pb-[var(--section-gap-s)] lg:flex lg:min-h-[calc(100dvh-4rem)] lg:items-center lg:py-16">
@@ -191,10 +184,9 @@ function Hero() {
         <Shot
           name="generate"
           alt="The documentation GitDoc Agent wrote for its own repository, fresh from a run"
-          desktop={{ file: 'generate', x: 440, y: 90, w: 760, ratio: 4 / 3 }}
-          phone={{ file: 'generate-phone', w: 390, ratio: 390 / 600, base: 390 }}
+          phone="generate-phone"
           priority
-          className="min-w-0 lg:-mr-[var(--gutter)] lg:rounded-r-none"
+          className="min-w-0"
         />
       </div>
     </section>
@@ -400,17 +392,13 @@ function AskSection() {
         <Shot
           name="ask"
           alt="The Ask tab answering where the n8n keys are added to requests, with vite.config.ts as its source"
-          desktop={{ file: 'ask', x: 230, y: 150, w: 1000, ratio: 16 / 9 }}
-          phone={{ file: 'ask-phone', y: 64, w: 390, ratio: 390 / 700, base: 390 }}
+          phone="ask-phone"
           className="mt-16"
         />
       </div>
     </section>
   )
 }
-
-// The sign-up dialog is captured on its own, at its real size (416 x 312)
-const SIGNUP = { w: 416, ratio: 416 / 312, base: 416, tall: 312 }
 
 // Split, the picture on the left this once
 function Private() {
@@ -420,7 +408,7 @@ function Private() {
         <Shot
           name="signup"
           alt="The Create an account dialog, offering to keep this browser's one doc on any device"
-          desktop={{ file: 'signup', ...SIGNUP }}
+          size={[832, 624]}
           className="mx-auto w-full max-w-[34rem] min-w-0"
         />
         <div className="min-w-0">
@@ -448,12 +436,6 @@ function Cache() {
           No. If its code has not changed, the docs come back at once.
         </p>
         <p className="mt-6 text-muted-foreground">Press Regenerate when you want a fresh run.</p>
-        <Shot
-          name="cache"
-          alt="The docs card saying Loaded from cache, beside its Regenerate and Download buttons"
-          desktop={{ file: 'cache', x: 440, y: 100, w: 990, ratio: 990 / 125 }}
-          className="mt-12 hidden sm:block"
-        />
       </div>
     </section>
   )

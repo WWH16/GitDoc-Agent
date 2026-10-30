@@ -1,8 +1,9 @@
 /* Hallmark · shape: Conversational FAQ, draw a33a7e (pricing swapped for the limits table; close on the run-it code, no band) · genre: modern-minimal · theme: brand · redesign: full
  * paper: oklch(1 0 0) · accent: oklch(0.684 0.207 33.86) · display: Outfit · body: system-ui · hero: Stage · nav: slab · footer: statement · signature: the run drawn as a git branch, commits forking into the docs and the Ask index
- * axes: light/geometric-sans/chromatic-orange · posture: restrained · contrast: pass · fold: pass · imagery: screenshots 3 (light and dark, captured from the running app) · v2.0.0 */
+ * axes: light/geometric-sans/chromatic-orange · posture: restrained · contrast: pass · fold: pass · imagery: screenshots 3, whole, never cropped (light and dark, phone captures under 40rem; captured from the running app) · v2.0.0 */
 /* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: P, a docs tool has little to argue; every head is a question the page answers with the product itself */
 /* Hallmark · waive 38iii · brand signature, placed once, in the hero head · the orange full stop is the logo's commit dot, the one mark the brand guide gives orange */
+/* Hallmark · waive 79 · hero is Stage, centred, about 205px above and 225px below the content at 1440 x 900 · the owner asked for whole screenshots, never zoomed or cropped, and a whole 16:10 screen is shorter than the fold */
 /* Hallmark · dismissed F18 · data-slot="button" is shadcn's component marker on the copy buttons, not a picture slot */
 /* Hallmark · dropped #features, onClick={restart} · the features anchor and the Replay control belonged to the drawn demo the screenshots replace */
 /* Hallmark · reworded every section head into the question it answers ("One repository in, two things out" to "What happens when I paste a repo?", "Run it locally" to "How do I run it?", "Ask, and see where the answer came from" to "Can I ask about the code?", "2. Add your n8n keys" to "2. Add your keys", "3. Start the app" to "4. Start it"; id features dropped) · the shape is Conversational FAQ; the Pinecone and keys copy was out of date */
@@ -117,7 +118,8 @@
   }
   .shot > img {
     display: block;
-    max-width: none;
+    width: 100%;
+    height: auto;
   }
   .shot::after {
     content: "";
