@@ -1,8 +1,9 @@
-import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, RefreshCw, SquarePen } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleX, CloudOff, Download, FileCode, FileText, Loader2, Maximize2, RefreshCw, SquarePen } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DocViewer } from '@/components/doc-viewer'
 import { AccountDialog, AccountMenu, useAccount, type AccountStart } from '@/components/account-dialog'
 import { linkError } from '@/lib/session'
 import { GitHubIcon } from '@/components/github-icon'
@@ -347,6 +348,8 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
     )
   }
 
+  const [fullView, setFullView] = useState(false)
+
   function download() {
     if (!result) return
     const blob = new Blob([result.markdown], { type: 'text/markdown' })
@@ -499,6 +502,10 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
                 : 'Preview of the generated DOCUMENTATION.md. Select a diagram to enlarge it.'}
             </CardDescription>
             <CardAction className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setFullView(true)}>
+                <Maximize2 />
+                <span className="sr-only sm:not-sr-only">Full view</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => generate(true)} disabled={phase === 'running' || !repo.trim()}>
                 <RefreshCw />
                 <span className="sr-only sm:not-sr-only">Regenerate</span>
@@ -512,6 +519,9 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
           <CardContent>
             <ZoomableArticle html={html} outline className={cn(PROSE, WIDE_PROSE)} />
           </CardContent>
+          {fullView && result && (
+            <DocViewer html={html} markdown={result.markdown} proseClass={PROSE} onDownload={download} onClose={() => setFullView(false)} />
+          )}
         </Card>
       ) : (
         phase === 'running' && (
