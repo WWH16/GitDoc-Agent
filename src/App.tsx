@@ -560,7 +560,8 @@ function Ask({ repo, setRepo }: RepoProps) {
   return (
     // Fills the viewport below the header (height + 1px border) and main's padding, without overflowing
     <div className="flex min-h-[calc(100dvh-7rem-1px)] flex-col sm:min-h-[calc(100dvh-8.5rem-1px)]">
-      <div className="flex items-center gap-2">
+      {/* Sticks just under the app header (h-16, sm:h-14, plus its 1px border) so the repo and New chat stay in reach */}
+      <div className="sticky top-[calc(4rem+1px)] z-[2] -my-2 flex items-center gap-2 bg-background py-2 sm:top-[calc(3.5rem+1px)]">
         <div className="max-w-sm flex-1">
           <label htmlFor="ask-repo" className="sr-only">
             Repository URL
