@@ -101,6 +101,24 @@
   }
 }
 
+/* Sections below the hero rise in as they scroll into view: native scroll-driven animation, so no JS and no observer.
+   Without support (Firefox) or with reduced motion, everything simply sits in place. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    translate: 0 2rem;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+  }
+}
+
 @layer components {
   .container {
     width: 100%;

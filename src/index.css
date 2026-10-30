@@ -103,6 +103,7 @@
   }
   /* Browser surfaces in the palette: brand-tinted selection and caret, scrollbars in the border colour */
   html {
+    scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
     caret-color: var(--brand);
   }

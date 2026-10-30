@@ -1,5 +1,5 @@
-import { Check, Copy } from 'lucide-react'
-import { StrictMode, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { ArrowUp, Check, Copy } from 'lucide-react'
+import { StrictMode, useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
@@ -17,6 +17,9 @@ const APP_URL = '/app/'
 const LEAD = 'max-w-[52ch] text-lead leading-[1.45] text-pretty text-muted-foreground'
 const CODE = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.85em]'
 const QUICK = 'duration-200 ease-out-quart motion-reduce:transition-none'
+// The page's one load moment, in the hero only: the run graph below already moves as you scroll, and the rest stays still.
+// Reduced motion shows everything at once.
+const ENTER = 'animate-in fade-in slide-in-from-bottom-3 fill-mode-both duration-700 ease-out-quart motion-reduce:animate-none'
 
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -48,7 +51,33 @@ function Landing() {
         <RunIt />
       </main>
       <Footer />
+      <BackToTop />
     </>
+  )
+}
+
+// Shows once the hero has scrolled away; the page's scroll-smooth (off under reduced motion) carries it up
+const PAST_HERO = () => scrollY > innerHeight
+function BackToTop() {
+  const shown = useSyncExternalStore(
+    (onChange) => (addEventListener('scroll', onChange, { passive: true }), () => removeEventListener('scroll', onChange)),
+    PAST_HERO,
+  )
+  return (
+    <a
+      href="#top"
+      aria-label="Back to top"
+      tabIndex={shown ? 0 : -1}
+      className={cn(
+        // Solid ink like the header slab, so it stands off any section it floats over
+        buttonVariants(),
+        'fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-20 size-12 p-0 shadow-lg ring-4 ring-background transition-[opacity,visibility,translate] sm:size-14',
+        QUICK,
+        shown ? 'visible opacity-100' : 'invisible translate-y-2 opacity-0',
+      )}
+    >
+      <ArrowUp className="size-5" strokeWidth={2.5} />
+    </a>
   )
 }
 
@@ -133,6 +162,60 @@ function Shot({
   )
 }
 
+// The orange full stop is the agent at work: it shows up at the start of the line and pulses while it thinks,
+// then writes "Get its docs" out ahead of itself and settles as the full stop. Plays once the first line is in;
+// hover the dot to run it again. The text is in the DOM throughout (only clipped), so screen readers read it whole.
+// Reduced motion: line and dot simply sit there.
+function AgentLine({ text }: { text: string }) {
+  const line = useRef<HTMLSpanElement>(null)
+  const dot = useRef<HTMLSpanElement>(null)
+  const run = useCallback(() => {
+    const words = line.current!
+    const el = dot.current!
+    if (REDUCED_MOTION.matches || el.getAnimations().length) return
+    const start = `${-words.getBoundingClientRect().width}px 0`
+    el.style.opacity = '1'
+    // Thinking: fades in at the start of the line and pulses twice, like a running node
+    el.animate(
+      [
+        { translate: start, opacity: 0, scale: 0.4 },
+        { translate: start, opacity: 1, scale: 1, offset: 0.2 },
+        { translate: start, opacity: 0.45, scale: 1.35, offset: 0.45 },
+        { translate: start, opacity: 1, scale: 1, offset: 0.7 },
+        { translate: start, opacity: 0.45, scale: 1.35, offset: 0.85 },
+        { translate: start, opacity: 1, scale: 1 },
+      ],
+      { duration: 1000, easing: 'ease-in-out' },
+    )
+    // Writing: the words appear a step at a time with the dot just ahead of them, like a cursor
+    const typing = { delay: 1000, duration: 80 * text.length, easing: `steps(${text.length}, end)`, fill: 'backwards' } as const
+    el.animate([{ translate: start }, { translate: '0 0' }], typing)
+    words.style.clipPath = ''
+    words.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], typing).finished.then(
+      () => (words.style.clipPath = 'none'),
+      () => {},
+    )
+    // Done: one small settle into place
+    el.animate([{ scale: 1.4 }, { scale: 1 }], { delay: 1000 + 80 * text.length, duration: 250, easing: 'ease-out' })
+  }, [text])
+  useEffect(() => {
+    // Wait for the display font (the line's width) and for the first line's entrance
+    const timer = setTimeout(() => document.fonts.ready.then(run), 500)
+    return () => clearTimeout(timer)
+  }, [run])
+  // Both start hidden, so nothing shows in place before the agent writes it
+  return (
+    <>
+      <span ref={line} className="motion-safe:[clip-path:inset(0_100%_0_0)]">
+        {text}
+      </span>
+      <span ref={dot} onPointerEnter={run} className="inline-block text-brand motion-safe:opacity-0">
+        .
+      </span>
+    </>
+  )
+}
+
 // Stage: the head beside the whole Generate screen, centred in the first screen
 function Hero() {
   return (
@@ -141,14 +224,14 @@ function Hero() {
         <div className="min-w-0">
           {/* One sentence a line: each stays whole at every width from 320px */}
           <h1>
-            <span className="block sm:whitespace-nowrap">Paste a repo.</span>
+            <span className={cn('block sm:whitespace-nowrap', ENTER)}>Paste a repo.</span>
             <span className="block sm:whitespace-nowrap">
-              Get its docs<span className="text-brand">.</span>
+              <AgentLine text="Get its docs" />
             </span>
           </h1>
-          <p className={cn(LEAD, 'mt-6')}>Readable docs with diagrams, then answers about the code, with sources.</p>
+          <p className={cn(LEAD, 'mt-6 delay-200', ENTER)}>Readable docs with diagrams, then answers about the code, with sources.</p>
           {/* Plain GET form: the app reads ?repo= and fills in the field */}
-          <form action={APP_URL} method="get" className="mt-10 max-w-xl space-y-2">
+          <form action={APP_URL} method="get" className={cn('mt-10 max-w-xl space-y-2 delay-300', ENTER)}>
             <label htmlFor="hero-repo" className="block text-sm font-medium">
               Repository URL
             </label>
@@ -176,7 +259,7 @@ function Hero() {
           alt="The documentation GitDoc Agent wrote for its own repository, fresh from a run"
           phone="generate-phone"
           priority
-          className="min-w-0"
+          className="min-w-0 animate-in fade-in slide-in-from-bottom-6 fill-mode-both delay-300 duration-1000 ease-out-quart motion-reduce:animate-none"
         />
       </div>
     </section>
@@ -252,7 +335,7 @@ function HowItWorks() {
   return (
     <section id="how" className="scroll-mt-16 border-t py-[var(--section-gap)]">
       <div className="container">
-        <div className="max-w-3xl">
+        <div className="reveal max-w-3xl">
           <h2>What happens when I paste a repo?</h2>
           <p className={cn(LEAD, 'mt-5')}>
             An AI agent in one n8n workflow: five steps, then a branch.
@@ -375,7 +458,7 @@ function AskSection() {
   return (
     <section className="border-t py-[var(--section-gap-l)]">
       <div className="container">
-        <div className="max-w-3xl">
+        <div className="reveal max-w-3xl">
           <h2>Can I ask about the code?</h2>
           <p className={cn(LEAD, 'mt-5')}>Yes. Each answer lists the files it came from, so you can check it.</p>
         </div>
@@ -383,7 +466,7 @@ function AskSection() {
           name="ask"
           alt="The Ask tab answering where the n8n keys are added to requests, with vite.config.ts as its source"
           phone="ask-phone"
-          className="mt-16"
+          className="reveal mt-16"
         />
       </div>
     </section>
@@ -399,9 +482,9 @@ function Private() {
           name="signup"
           alt="The Create an account dialog, offering to keep this browser's one doc on any device"
           size={[832, 624]}
-          className="mx-auto w-full max-w-[34rem] min-w-0"
+          className="reveal mx-auto w-full max-w-[34rem] min-w-0"
         />
-        <div className="min-w-0">
+        <div className="reveal min-w-0">
           <h2>Who can see my docs?</h2>
           <p className={cn(LEAD, 'mt-5')}>Only you. You start without an account, and this browser keeps your docs and chats.</p>
           <p className="mt-4 max-w-[52ch] text-muted-foreground">
@@ -420,7 +503,7 @@ function Private() {
 function Cache() {
   return (
     <section className="border-t py-[var(--section-gap-s)]">
-      <div className="container">
+      <div className="reveal container">
         <h2 className="text-title tracking-[-0.015em] text-muted-foreground">Does the same repo run twice?</h2>
         <p className="mt-6 max-w-[24ch] font-display text-display-s leading-[1.08] font-semibold tracking-[-0.03em] text-balance">
           No. If its code has not changed, the docs come back at once.
@@ -444,10 +527,10 @@ function Limits() {
   return (
     <section id="limits" className="scroll-mt-16 border-t py-[var(--section-gap)]">
       <div className="container grid gap-x-8 gap-y-10 lg:grid-cols-12">
-        <h2 className="lg:col-span-4">How many runs do I get?</h2>
+        <h2 className="reveal lg:col-span-4">How many runs do I get?</h2>
         <dl className="lg:col-span-8">
           {LIMITS.map(([term, detail]) => (
-            <div key={term} className="grid gap-1 border-t py-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr] sm:gap-8">
+            <div key={term} className="reveal grid gap-1 border-t py-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr] sm:gap-8">
               <dt className="font-display text-title font-semibold tracking-[-0.015em]">{term}</dt>
               <dd className="text-lead text-muted-foreground">{detail}</dd>
             </div>
@@ -493,13 +576,13 @@ function RunIt() {
   return (
     <section id="run" className="scroll-mt-16 border-t py-[var(--section-gap)]">
       <div className="container">
-        <div className="max-w-3xl">
+        <div className="reveal max-w-3xl">
           <h2>How do I connect my n8n?</h2>
           <p className={cn(LEAD, 'mt-5')}>Run the app on your machine, next to n8n, in four steps.</p>
         </div>
         <ol className="mt-16">
           {RUN_STEPS.map((s, i) => (
-            <li key={s.title} className="grid gap-x-8 gap-y-3 border-t py-8 lg:grid-cols-12">
+            <li key={s.title} className="reveal grid gap-x-8 gap-y-3 border-t py-8 lg:grid-cols-12">
               <div className="lg:col-span-4">
                 <h3>
                   <span className="text-muted-foreground tabular-nums">{i + 1}.</span> {s.title}
@@ -557,7 +640,7 @@ function Footer() {
   return (
     <footer className="border-t py-[var(--section-gap-s)]">
       <div className="container">
-        <p className="max-w-[30ch] font-display text-section leading-[1.08] font-semibold tracking-[-0.025em] text-balance">
+        <p className="reveal max-w-[30ch] font-display text-section leading-[1.08] font-semibold tracking-[-0.025em] text-balance">
           Every screen on this page is GitDoc Agent documenting itself.
         </p>
         <div className="mt-12 flex flex-col gap-6 text-sm sm:flex-row sm:items-center sm:justify-between">
@@ -575,7 +658,6 @@ function Footer() {
               Run it locally
             </a>
           </nav>
-          <p className="text-muted-foreground">Not affiliated with or endorsed by GitHub.</p>
         </div>
       </div>
     </footer>
