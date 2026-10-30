@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, getProgress, showProgressHint, timeline } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, currentStep, getHistory, getProgress, latestFinishedId, showProgressHint, timeline } from './api.ts'
 
 const reply = (status: number, body: unknown) => {
   globalThis.fetch = async () => new Response(JSON.stringify(body), { status })
@@ -122,4 +122,14 @@ test('a cancelled ask rejects with AbortError, not the "No response" message', a
   const c = new AbortController()
   c.abort()
   await assert.rejects(askRepo('r', 'q', 's', [], c.signal), { name: 'AbortError' })
+})
+
+test('latestFinishedId reads the newest listed execution, without execution data', async () => {
+  let url = ''
+  globalThis.fetch = async (u) => {
+    url = String(u)
+    return new Response(JSON.stringify({ data: [{ id: 512, status: 'success' }] }))
+  }
+  assert.equal(await latestFinishedId(), 512)
+  assert.ok(!url.includes('includeData'))
 })

@@ -20,6 +20,7 @@ import {
   currentStep,
   getHistory,
   getProgress,
+  latestFinishedId,
   showProgressHint,
   type NodeRun,
   type Progress as RunProgress,
@@ -256,6 +257,12 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     setElapsed(0)
     setError('')
     setResult(null)
+    // n8n's execution list leaves running runs out, so note the newest finished one first: ours has finished once a
+    // newer id appears there.
+    // ponytail: assumes the newest execution is ours (single local user); match on runId if several people share n8n
+    const before = await latestFinishedId().catch(() => 0)
+    const finishedRun = async () =>
+      (await latestFinishedId().catch(() => 0)) > before ? getProgress('').catch(() => null) : null
     try {
       const res = await callWorkflow(url)
       setHtml(await renderMarkdown(res.preview))
@@ -263,17 +270,13 @@ function Generate({ repo, setRepo, onFinished }: RepoProps & { onFinished: () =>
     } catch (e) {
       setError((e as Error).message)
       setPhase('error')
-      // The run may end between polls: fetch the latest execution once more so the list ends on the final node.
-      getProgress('').then(applyProgress).catch(() => {})
+      // The run may end between polls: read our finished run once so the list ends on the final node.
+      finishedRun().then(applyProgress)
       return
     }
-    // "Return Documentation" answers before the Ask indexing branch runs, so wait for the execution to end.
-    // ponytail: assumes the latest execution is ours (single local user); match on runId if several people share n8n
-    let p = await getProgress('').catch(() => null)
-    for (let i = 0; p?.status === 'running' && i < 100; i++) {
-      await new Promise((r) => setTimeout(r, 3000))
-      p = await getProgress('').catch(() => null)
-    }
+    // "Return Documentation" answers before the last node runs, so wait for the execution to end.
+    let p: RunProgress | null = null
+    for (let i = 0; i < 100 && !(p = await finishedRun()); i++) await new Promise((r) => setTimeout(r, 3000))
     applyProgress(p)
     if (p && FAILED.has(p.status)) {
       setError(p.error || `n8n marked execution #${p.id} as ${p.status}.`)

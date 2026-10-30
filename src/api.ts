@@ -115,6 +115,12 @@ function localTime(stamp: unknown) {
   return s && !isNaN(+d) ? d.toLocaleString('sv-SE') : ''
 }
 
+/** Id of the newest finished execution, or 0. n8n's list leaves running executions out, so a run counts as finished
+ *  once its id shows up here. Light: no execution data. */
+export async function latestFinishedId(): Promise<number> {
+  return Number((await executions('limit=1'))[0]?.id ?? 0)
+}
+
 export async function getHistory(): Promise<Run[]> {
   return (await executions('limit=20')).map((e) => ({
     id: e.id,
