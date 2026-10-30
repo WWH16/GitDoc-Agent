@@ -9,6 +9,15 @@ const slug = (text: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-|-$/g, '') || 'section'
 
+// Puts `el` inside a new div of class `className` and returns the div
+function wrap(el: Element, className: string) {
+  const box = el.ownerDocument.createElement('div')
+  box.className = className
+  el.replaceWith(box)
+  box.append(el)
+  return box
+}
+
 export async function renderMarkdown(md: string): Promise<string> {
   const [{ marked }, { default: DOMPurify }, { default: hljs }] = await Promise.all([
     import('marked'),
@@ -23,31 +32,17 @@ export async function renderMarkdown(md: string): Promise<string> {
     if (!given || hljs.getLanguage(given)) hljs.highlightElement(code as HTMLElement)
     const lang = given ?? /language-([\w-]+)/.exec(code.className)?.[1]
 
-    const pre = code.parentElement!
-    const box = doc.createElement('div')
-    box.className = 'md-code'
-    const bar = doc.createElement('div')
-    bar.className = 'md-code-bar'
-    const label = doc.createElement('span')
-    label.textContent = lang ?? 'code'
-    const copy = doc.createElement('button')
-    copy.type = 'button'
-    copy.dataset.copy = ''
-    copy.textContent = 'Copy'
-    bar.append(label, copy)
-    pre.replaceWith(box)
-    box.append(bar, pre)
+    const box = wrap(code.parentElement!, 'md-code')
+    box.insertAdjacentHTML('afterbegin', '<div class="md-code-bar"><span></span><button type="button" data-copy>Copy</button></div>')
+    box.querySelector('span')!.textContent = lang ?? 'code'
   })
 
   // Focusable, so a wide table can be scrolled from the keyboard
   doc.querySelectorAll('table').forEach((table) => {
-    const box = doc.createElement('div')
-    box.className = 'md-table'
+    const box = wrap(table, 'md-table')
     box.tabIndex = 0
     box.setAttribute('role', 'region')
     box.setAttribute('aria-label', 'Table')
-    table.replaceWith(box)
-    box.append(table)
   })
 
   const used = new Set<string>()

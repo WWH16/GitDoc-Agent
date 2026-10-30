@@ -1,6 +1,6 @@
 import { Download, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { ZoomableArticle } from '@/components/zoomable-article'
+import { useModal, ZoomableArticle } from '@/components/zoomable-article'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -37,16 +37,7 @@ export function DocViewer({
     })),
   )
 
-  useEffect(() => {
-    dialog.current?.showModal()
-    // The app behind must not scroll while the viewer is open
-    const root = document.documentElement
-    const before = root.style.overflow
-    root.style.overflow = 'hidden'
-    return () => {
-      root.style.overflow = before
-    }
-  }, [])
+  useModal(dialog)
 
   // The section being read: the last heading that has passed the top quarter of the viewer
   useEffect(() => {
@@ -71,6 +62,7 @@ export function DocViewer({
     import('highlight.js/lib/common').then(({ default: hljs }) => setSource(hljs.highlight(markdown, { language: 'markdown' }).value))
   }, [view, source, markdown])
 
+  // Searched inside the viewer: the page behind holds the same doc, so its headings share these ids
   function jump(id: string) {
     scroller.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
   }

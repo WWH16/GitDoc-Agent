@@ -1,5 +1,5 @@
 import { Minus, Plus, Scan, X } from 'lucide-react'
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +26,21 @@ function intrinsicSize(img: HTMLImageElement) {
   }
   const r = img.getBoundingClientRect()
   return { w: img.naturalWidth || r.width, h: img.naturalHeight || r.height }
+}
+
+// Open full-screen dialogs. Counted, not saved and restored: a diagram viewer inside the docs viewer can close in
+// either order and the page still scrolls again after the last one.
+let locks = 0
+
+/** Opens a full-screen <dialog> as a modal on mount; the page behind does not scroll while any is open. */
+export function useModal(dialog: RefObject<HTMLDialogElement | null>) {
+  useEffect(() => {
+    dialog.current?.showModal()
+    if (locks++ === 0) document.documentElement.style.overflow = 'hidden'
+    return () => {
+      if (--locks === 0) document.documentElement.style.overflow = ''
+    }
+  }, [dialog])
 }
 
 /** Rendered Markdown (src/lib/markdown.ts) whose images open in an in-page viewer with zoom and pan, and whose code
@@ -152,20 +167,11 @@ function Viewer({ shown, onClose }: { shown: Shown; onClose: () => void }) {
     })
   }
 
+  useModal(dialog)
   useEffect(() => {
-    const d = dialog.current
-    if (!d) return
-    d.showModal()
     reset()
-    // The page behind must not scroll while the viewer is open
-    const root = document.documentElement
-    const before = root.style.overflow
-    root.style.overflow = 'hidden'
     window.addEventListener('resize', reset)
-    return () => {
-      root.style.overflow = before
-      window.removeEventListener('resize', reset)
-    }
+    return () => window.removeEventListener('resize', reset)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per opened image
   }, [shown])
 
