@@ -161,10 +161,13 @@ function Shot({
   )
 }
 
-// The orange full stop is the agent at work: it shows up at the start of the line and pulses while it thinks,
-// then writes "Get its docs" out ahead of itself and settles as the full stop. Plays once the first line is in;
-// hover the dot to run it again. The text is in the DOM throughout (only clipped), so screen readers read it whole.
-// Reduced motion: line and dot simply sit there.
+// The orange full stop is the agent's pen: it lands at the start of the line, glides right writing "Get its docs" out
+// behind it, and comes to rest as the full stop. Plays once the first line is in; hover the dot to run it again.
+// The text is in the DOM throughout (only clipped), so screen readers read it whole. Reduced motion: both simply sit there.
+const PEN_IN = 200
+const WRITE = 750
+// Fast off the mark, easing into the full stop; the dot and the words share it so the pen stays on the edge of the ink
+const WRITE_EASE = 'cubic-bezier(0.55, 0, 0.25, 1)'
 function AgentLine({ text }: { text: string }) {
   const line = useRef<HTMLSpanElement>(null)
   const dot = useRef<HTMLSpanElement>(null)
@@ -174,29 +177,25 @@ function AgentLine({ text }: { text: string }) {
     if (REDUCED_MOTION.matches || el.getAnimations().length) return
     const start = `${-words.getBoundingClientRect().width}px 0`
     el.style.opacity = '1'
-    // Thinking: fades in at the start of the line and pulses twice, like a running node
+    words.style.clipPath = ''
+    // Pen down: the dot drops onto the start of the line
     el.animate(
       [
-        { translate: start, opacity: 0, scale: 0.4 },
-        { translate: start, opacity: 1, scale: 1, offset: 0.2 },
-        { translate: start, opacity: 0.45, scale: 1.35, offset: 0.45 },
-        { translate: start, opacity: 1, scale: 1, offset: 0.7 },
-        { translate: start, opacity: 0.45, scale: 1.35, offset: 0.85 },
+        { translate: start, opacity: 0, scale: 1.8 },
         { translate: start, opacity: 1, scale: 1 },
       ],
-      { duration: 1000, easing: 'ease-in-out' },
+      { duration: PEN_IN, easing: 'ease-out' },
     )
-    // Writing: the words appear a step at a time with the dot just ahead of them, like a cursor
-    const typing = { delay: 1000, duration: 80 * text.length, easing: `steps(${text.length}, end)`, fill: 'backwards' } as const
-    el.animate([{ translate: start }, { translate: '0 0' }], typing)
-    words.style.clipPath = ''
-    words.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], typing).finished.then(
+    // Writing: the dot glides right and the words appear exactly up to it
+    const writing = { delay: PEN_IN, duration: WRITE, easing: WRITE_EASE, fill: 'backwards' } as const
+    el.animate([{ translate: start }, { translate: '0 0' }], writing)
+    words.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], writing).finished.then(
       () => (words.style.clipPath = 'none'),
       () => {},
     )
-    // Done: one small settle into place
-    el.animate([{ scale: 1.4 }, { scale: 1 }], { delay: 1000 + 80 * text.length, duration: 250, easing: 'ease-out' })
-  }, [text])
+    // Pen up: a small settle into the full stop
+    el.animate([{ scale: 1.3 }, { scale: 1 }], { delay: PEN_IN + WRITE, duration: 220, easing: 'ease-out' })
+  }, [])
   useEffect(() => {
     // Wait for the display font (the line's width) and for the first line's entrance
     const timer = setTimeout(() => document.fonts.ready.then(run), 500)
