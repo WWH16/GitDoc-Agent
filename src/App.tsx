@@ -117,7 +117,8 @@ export default function App() {
   }, [])
   useEffect(() => {
     const id = load<string>('gitdoc:doc')
-    if (id) loadGeneration(id).then(setOpened, () => save('gitdoc:doc', null))
+    // A failed load keeps the id: it may be a dropped connection, and a doc that is gone just fails again
+    if (id) loadGeneration(id).then(setOpened, () => {})
   }, [])
   const { user, saved, needsPassword, recovering } = useAccount()
   const accountDialog = useRef<HTMLDialogElement>(null)
