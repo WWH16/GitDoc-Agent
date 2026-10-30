@@ -1,4 +1,4 @@
-import { ArrowUp, Check, Copy } from 'lucide-react'
+import { ArrowUp, Check } from 'lucide-react'
 import { StrictMode, useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { GitHubIcon } from '@/components/github-icon'
@@ -15,7 +15,6 @@ import './landing.css'
 const REPO_URL = 'https://github.com/WWH16/GitDoc-Agent'
 const APP_URL = '/app/'
 const LEAD = 'max-w-[52ch] text-lead leading-[1.45] text-pretty text-muted-foreground'
-const CODE = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.85em]'
 const QUICK = 'duration-200 ease-out-quart motion-reduce:transition-none'
 // The page's one load moment, in the hero only: the run graph below already moves as you scroll, and the rest stays still.
 // Reduced motion shows everything at once.
@@ -48,7 +47,7 @@ function Landing() {
         <Private />
         <Cache />
         <Limits />
-        <RunIt />
+        <GetBack />
       </main>
       <Footer />
       <BackToTop />
@@ -84,7 +83,7 @@ function BackToTop() {
 const NAV = [
   ['How it works', '#how'],
   ['Limits', '#limits'],
-  ['Run it', '#run'],
+  ['What you get', '#get'],
 ] as const
 
 // A slab: one solid full-width bar in the other theme's palette (index.css), the same bar as the app's header
@@ -216,6 +215,27 @@ function AgentLine({ text }: { text: string }) {
   )
 }
 
+// Plain GET form: the app reads ?repo= and fills in the field. In the hero and again at the close of the page.
+function RepoForm({ id, className }: { id: string; className?: string }) {
+  return (
+    <form action={APP_URL} method="get" className={cn('max-w-xl space-y-2', className)}>
+      <label htmlFor={id} className="block text-sm font-medium">
+        Repository URL
+      </label>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <GitHubIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input id={id} name="repo" type="url" required placeholder={URL_PLACEHOLDER} className="h-12 border-muted-foreground pl-9 sm:h-12" />
+        </div>
+        <Button type="submit" className="h-12 px-6 active:translate-y-px sm:h-12">
+          Generate docs
+        </Button>
+      </div>
+      <p className="text-sm text-muted-foreground">Opens the app with this repository filled in. No account needed.</p>
+    </form>
+  )
+}
+
 // Stage: the head beside the whole Generate screen, centred in the first screen
 function Hero() {
   return (
@@ -230,29 +250,7 @@ function Hero() {
             </span>
           </h1>
           <p className={cn(LEAD, 'mt-6 delay-200', ENTER)}>Readable docs with diagrams, then answers about the code, with sources.</p>
-          {/* Plain GET form: the app reads ?repo= and fills in the field */}
-          <form action={APP_URL} method="get" className={cn('mt-10 max-w-xl space-y-2 delay-300', ENTER)}>
-            <label htmlFor="hero-repo" className="block text-sm font-medium">
-              Repository URL
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <GitHubIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="hero-repo"
-                  name="repo"
-                  type="url"
-                  required
-                  placeholder={URL_PLACEHOLDER}
-                  className="h-12 border-muted-foreground pl-9 sm:h-12"
-                />
-              </div>
-              <Button type="submit" className="h-12 px-6 active:translate-y-px sm:h-12">
-                Generate docs
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground">Opens the app with this repository filled in. No account needed.</p>
-          </form>
+          <RepoForm id="hero-repo" className={cn('mt-10 delay-300', ENTER)} />
         </div>
         <Shot
           name="generate"
@@ -460,11 +458,22 @@ function AskSection() {
       <div className="container">
         <div className="reveal max-w-3xl">
           <h2>Can I ask about the code?</h2>
-          <p className={cn(LEAD, 'mt-5')}>Yes. Each answer lists the files it came from, so you can check it.</p>
+          <p className={cn(LEAD, 'mt-5')}>Yes. Every answer lists the files it came from, so you can check it.</p>
+          {/* True by construction: the app reads public repos with no GitHub sign-in, and Ask only searches the code a run indexed */}
+          <p className="mt-4 max-w-[52ch] text-muted-foreground">
+            Ask has read-only access. It cannot open pull requests or modify your code. Its answers come only from a copy of
+            the code saved when your documentation was generated.
+          </p>
+          {/* The indexer skips .env files; the Ask workflow's Guardrails node and system prompt do the rest */}
+          <p className="mt-4 max-w-[52ch] text-muted-foreground">
+            Your secrets remain protected. Ask does not disclose passwords, keys or other credentials, files that contain them
+            are never stored, and attempts to manipulate it, whether in a question or hidden in the code, are ignored.
+          </p>
         </div>
         <Shot
           name="ask"
-          alt="The Ask tab answering where the n8n keys are added to requests, with vite.config.ts as its source"
+          alt="The Ask tab answering what this project does, with src/App.tsx, src/landing.tsx and a plan document as its sources"
+          size={[1440, 1140]}
           phone="ask-phone"
           className="reveal mt-16"
         />
@@ -482,7 +491,8 @@ function Private() {
           name="signup"
           alt="The Create an account dialog, offering to keep this browser's one doc on any device"
           size={[832, 624]}
-          className="reveal mx-auto w-full max-w-[34rem] min-w-0"
+          // The capture is the dialog alone, its corners cut clear: it brings its own rounded border, so no shot frame
+          className="reveal mx-auto w-full max-w-[34rem] min-w-0 rounded-none bg-transparent after:hidden"
         />
         <div className="reveal min-w-0">
           <h2>Who can see my docs?</h2>
@@ -541,97 +551,44 @@ function Limits() {
   )
 }
 
-const RUN_STEPS: { title: string; note: ReactNode; code: string }[] = [
-  { title: 'Clone and install', note: null, code: `git clone ${REPO_URL}.git\ncd GitDoc-Agent\nnpm install` },
-  {
-    title: 'Add your keys',
-    note: (
-      <>
-        In a <code className={CODE}>.env</code> file in the project folder. The secret key never gets a{' '}
-        <code className={CODE}>VITE_</code> prefix.
-      </>
-    ),
-    code:
-      'N8N_WEBHOOK_TOKEN=your-webhook-token\nN8N_API_KEY=your-n8n-api-key\nVITE_SUPABASE_URL=https://your-project.supabase.co\nVITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...\nSUPABASE_SERVICE_ROLE_KEY=sb_secret_...',
-  },
-  {
-    title: 'Set up Supabase',
-    note: 'Run both files in the SQL Editor, then turn on anonymous sign-ins under Authentication.',
-    code: 'docs/supabase-setup.sql\ndocs/supabase-app.sql',
-  },
-  {
-    title: 'Start it',
-    note: (
-      <>
-        Then open <code className={CODE}>localhost:5173/app/</code>. n8n runs on port 5678 with the GitDoc Agent workflows; turn
-        on <span className="font-medium text-foreground">Save execution progress</span> for live steps.
-      </>
-    ),
-    code: 'npm run dev',
-  },
-]
+// What the docs are for, in the words of the pitch that started the project. A draft to start from, never a claim
+// that it understands the code better than the people who wrote it.
+const USES = [
+  ['Start from a draft', 'Hours of writing an architecture overview become minutes of reading and fixing one.'],
+  ['Bring someone new in', 'A new teammate reads how the parts fit together before touching the code.'],
+  ['Come back months later', 'Pick up where you left off without retracing the whole codebase.'],
+  ['Show a client', 'Hand over an overview of what the system does and how it is used.'],
+] as const
 
-// Rows again, each step's command beside it: the page closes on the thing a developer does next
-function RunIt() {
+// Closes the page: what a run hands back and why it helps, then the form again, the thing a visitor does next
+function GetBack() {
   return (
-    <section id="run" className="scroll-mt-16 border-t py-[var(--section-gap)]">
+    <section id="get" className="scroll-mt-16 border-t py-[var(--section-gap)]">
       <div className="container">
         <div className="reveal max-w-3xl">
-          <h2>How do I connect my n8n?</h2>
-          <p className={cn(LEAD, 'mt-5')}>Run the app on your machine, next to n8n, in four steps.</p>
+          <h2>What do I get back?</h2>
+          <p className={cn(LEAD, 'mt-5')}>
+            One <span className="font-mono text-[0.9em] text-foreground">DOCUMENTATION.md</span>: a module overview, the data
+            models and how they relate, the API, and how the front end talks to the back end. ER and sequence diagrams are in it too.
+          </p>
+          <p className="mt-4 max-w-[52ch] text-muted-foreground">It is a first draft, not a replacement for knowing your code. Read it, fix it, keep it.</p>
+          {/* Every GitHub call in the n8n workflows is a GET; the file filter drops .env files, and the prompt writes <redacted> for secrets */}
+          <p className="mt-4 max-w-[52ch] text-muted-foreground">
+            Your repository is only read. Nothing in it is changed, added or removed. Your secrets stay out of it too: files that
+            hold passwords and keys are skipped, and any secret found in the code is hidden in the docs.
+          </p>
         </div>
-        <ol className="mt-16">
-          {RUN_STEPS.map((s, i) => (
-            <li key={s.title} className="reveal grid gap-x-8 gap-y-3 border-t py-8 lg:grid-cols-12">
-              <div className="lg:col-span-4">
-                <h3>
-                  <span className="text-muted-foreground tabular-nums">{i + 1}.</span> {s.title}
-                </h3>
-                {s.note && <p className="mt-2 max-w-[40ch] text-muted-foreground">{s.note}</p>}
-              </div>
-              <div className="min-w-0 lg:col-span-8">
-                <CodeBlock code={s.code} />
-              </div>
+        <ul className="mt-16 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+          {USES.map(([title, text]) => (
+            <li key={title} className="reveal border-t pt-6">
+              <h3>{title}</h3>
+              <p className="mt-2 text-muted-foreground">{text}</p>
             </li>
           ))}
-        </ol>
+        </ul>
+        <RepoForm id="close-repo" className="reveal mt-20" />
       </div>
     </section>
-  )
-}
-
-function CodeBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false)
-
-  return (
-    // The button sits beside the scrolling code, so long lines never run under it
-    <div className="flex items-start rounded-xl border bg-muted/50">
-      <pre className="min-w-0 flex-1 overflow-x-auto p-4 font-mono text-sm leading-relaxed">
-        <code>{code}</code>
-      </pre>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Copy to clipboard"
-        className="m-1.5 active:translate-y-px"
-        // Where the clipboard is blocked, select the text instead so Ctrl+C still works
-        onClick={(e) => {
-          const pre = e.currentTarget.previousElementSibling!
-          navigator.clipboard
-            .writeText(code)
-            .then(() => {
-              setCopied(true)
-              setTimeout(() => setCopied(false), 2000)
-            })
-            .catch(() => getSelection()?.selectAllChildren(pre))
-        }}
-      >
-        {copied ? <Check className="text-success" /> : <Copy />}
-      </Button>
-      <span aria-live="polite" className="sr-only">
-        {copied ? 'Copied' : ''}
-      </span>
-    </div>
   )
 }
 
@@ -654,7 +611,7 @@ function Footer() {
             <a href={REPO_URL} className="underline-offset-4 hover:underline">
               Source on GitHub
             </a>
-            <a href="#run" className="underline-offset-4 hover:underline">
+            <a href={`${REPO_URL}#readme`} className="underline-offset-4 hover:underline">
               Run it locally
             </a>
           </nav>
