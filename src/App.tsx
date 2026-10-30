@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AccountButton } from '@/components/account-dialog'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
 import { ZoomableArticle } from '@/components/zoomable-article'
@@ -147,6 +148,7 @@ export default function App() {
               <TabsTrigger value="ask" className="sm:px-3">Ask</TabsTrigger>
               <TabsTrigger value="history" className="sm:px-3">Run history</TabsTrigger>
             </TabsList>
+            <AccountButton />
             <ThemeToggle />
           </div>
         </div>

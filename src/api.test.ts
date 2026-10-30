@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { askRepo, recentTurns, callWorkflow, currentStep, repoKey, setTokenSource } from './api.ts'
+import { askRepo, recentTurns, callWorkflow, accountState, currentStep, repoKey, setTokenSource } from './api.ts'
 import { showProgressHint, timeline, toProgress } from './progress.ts'
 
 const reply = (status: number, body: unknown) => {
@@ -137,4 +137,10 @@ test('401 maps to sign-in message', async () => {
 
 test('repoKey normalizes like the workflows', () => {
   assert.equal(repoKey(' https://github.com/WWH16/DSS.git/ '), 'https://github.com/wwh16/dss')
+})
+
+test('accountState tells anonymous from saved users', () => {
+  assert.equal(accountState(null), 'none')
+  assert.equal(accountState({ is_anonymous: true }), 'anonymous')
+  assert.equal(accountState({ is_anonymous: false, email: 'a@b.c' }), 'saved')
 })

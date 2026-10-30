@@ -2,6 +2,10 @@
 
 export const URL_PLACEHOLDER = 'https://github.com/<username>/<repo-name>'
 
+/** No session yet, the anonymous account this browser got, or an account saved with an email (usable on any device). */
+export const accountState = (user: { is_anonymous?: boolean; email?: string } | null): 'none' | 'anonymous' | 'saved' =>
+  !user ? 'none' : user.is_anonymous ? 'anonymous' : 'saved'
+
 /** The repo URL normalized like the n8n workflows do, so each repository has one key however it was typed. */
 export const repoKey = (url: string) => url.trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '')
 
