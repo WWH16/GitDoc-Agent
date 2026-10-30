@@ -516,8 +516,8 @@ function Generate({ repo, setRepo, opened, onFinished, onRunningChange, unsaved,
               </Button>
             </CardAction>
           </CardHeader>
-          <CardContent>
-            <ZoomableArticle html={html} outline className={cn(PROSE, WIDE_PROSE)} />
+          <CardContent className="xl:[--heading-offset:11rem]">
+            <ZoomableArticle html={html} outline="sidebar" className={cn(PROSE, WIDE_PROSE)} />
           </CardContent>
           {fullView && result && (
             <DocViewer html={html} markdown={result.markdown} proseClass={PROSE} onDownload={download} onClose={() => setFullView(false)} />

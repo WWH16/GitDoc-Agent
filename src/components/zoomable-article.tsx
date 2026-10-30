@@ -1,5 +1,5 @@
 import { Minus, Plus, Scan, X } from 'lucide-react'
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -43,20 +43,108 @@ export function useModal(dialog: RefObject<HTMLDialogElement | null>) {
   }, [dialog])
 }
 
+export type Section = { id: string; text: string; sub: boolean }
+
+/** A doc's sections and their subsections: h2 and h3, or h3 and h4 when the doc has no h2 (ids from markdown.ts). */
+export function sectionsOf(html: string): Section[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const [top, sub] = doc.querySelector('h2[id]') ? ['H2', 'H3'] : ['H3', 'H4']
+  return [...doc.querySelectorAll(`${top}[id], ${sub}[id]`)].map((h) => ({
+    id: h.id,
+    text: h.textContent ?? '',
+    sub: h.tagName === sub,
+  }))
+}
+
+/** The section being read: the last one whose heading has passed the top quarter of `scroller` (the window when
+ *  null), or the last section once the bottom is reached, since a short last section never gets that high. */
+export function useActiveSection(sections: Section[], within: RefObject<HTMLElement | null>, scroller?: RefObject<HTMLElement | null>) {
+  const [active, setActive] = useState('')
+  useEffect(() => {
+    const box = scroller?.current ?? null
+    const target: HTMLElement | Window = box ?? window
+    let frame = 0
+    const update = () => {
+      frame = 0
+      const heads = sections
+        .map((s) => within.current?.querySelector(`[id="${CSS.escape(s.id)}"]`))
+        .filter((h): h is Element => !!h)
+      const top = box ? box.getBoundingClientRect().top + box.clientHeight / 4 : innerHeight / 4
+      const atEnd = box
+        ? box.scrollTop + box.clientHeight >= box.scrollHeight - 2
+        : scrollY + innerHeight >= document.documentElement.scrollHeight - 2
+      const passed = heads.filter((h) => h.getBoundingClientRect().top <= top)
+      setActive((atEnd ? heads.at(-1) : (passed.at(-1) ?? heads[0]))?.id ?? '')
+    }
+    const onScroll = () => {
+      frame ||= requestAnimationFrame(update)
+    }
+    update()
+    target.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      target.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(frame)
+    }
+  }, [sections, within, scroller])
+  return active
+}
+
+/** The contents list: subsections indented, titles wrap rather than cut off, only the section being read is filled. */
+export function Contents({
+  sections,
+  active,
+  onJump,
+  className,
+}: {
+  sections: Section[]
+  active: string
+  onJump: (id: string) => void
+  className?: string
+}) {
+  return (
+    <nav aria-label="Contents" className={className}>
+      <p className="px-2 pb-2 text-sm font-medium">Contents</p>
+      <ol className="space-y-0.5 text-sm">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              onClick={() => onJump(s.id)}
+              aria-current={active === s.id ? 'location' : undefined}
+              className={cn(
+                'block w-full rounded-md px-2 py-1.5 text-left leading-snug transition-colors',
+                s.sub && 'pl-5',
+                active === s.id ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {s.text}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  )
+}
+
 /** Rendered Markdown (src/lib/markdown.ts) whose images open in an in-page viewer with zoom and pan, and whose code
- *  blocks copy. With `outline`, a document of three or more sections opens with a contents list. */
-export function ZoomableArticle({ html, className, outline = false }: { html: string; className?: string; outline?: boolean }) {
+ *  blocks copy. With `outline`, a doc of three or more sections gets a contents list: a sticky sidebar from 1280px
+ *  (`outline="sidebar"`), and above the doc below that. */
+export function ZoomableArticle({
+  html,
+  className,
+  outline,
+}: {
+  html: string
+  className?: string
+  outline?: 'sidebar' | 'list'
+}) {
   const article = useRef<HTMLElement>(null)
   const [shown, setShown] = useState<Shown | null>(null)
-  const [sections, setSections] = useState<{ id: string; text: string }[]>([])
-
-  useEffect(() => {
-    // The document's top section level: generated docs use h2 or h3 under their h1
-    const el = article.current
-    const level = el?.querySelector('h2[id]') ? 'h2[id]' : 'h3[id]'
-    const heads = [...(el?.querySelectorAll(level) ?? [])]
-    setSections(heads.map((h) => ({ id: h.id, text: h.textContent ?? '' })))
-  }, [html])
+  const sections = useMemo(() => (outline ? sectionsOf(html) : []), [html, outline])
+  const active = useActiveSection(outline === 'sidebar' ? sections : [], article)
+  const top = sections.filter((s) => !s.sub)
+  // Searched inside this article: a full view of the same doc may share these ids
+  const jump = (id: string) => article.current?.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
 
   // Images come from sanitized HTML, so make them reachable by keyboard here
   useEffect(() => {
@@ -91,18 +179,39 @@ export function ZoomableArticle({ html, className, outline = false }: { html: st
     )
   }
 
+  const withContents = !!outline && top.length >= 3
+
   return (
-    <>
-      {outline && sections.length >= 3 && (
-        // Lines up with the docs' text column (WIDE_PROSE in App.tsx)
-        <details className="mb-6 ml-[max(0px,calc((100%-46rem)/2))] max-w-[70ch] rounded-xl border px-4 py-3 text-sm xl:ml-0 [&[open]>summary]:mb-2">
-          <summary className="cursor-pointer font-medium select-none">Contents, {sections.length} sections</summary>
+    <div className={cn(withContents && outline === 'sidebar' && 'xl:grid xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10')}>
+      {withContents && outline === 'sidebar' && (
+        // Below the docs card's sticky header (App.tsx), scrolling on its own when the list is long
+        <Contents
+          sections={sections}
+          active={active}
+          onJump={jump}
+          className="sticky top-44 hidden max-h-[calc(100dvh-12rem)] self-start overflow-y-auto pr-2 xl:block"
+        />
+      )}
+      <div className="min-w-0">
+      {withContents && (
+        // Lines up with the docs' text column (WIDE_PROSE in App.tsx); from 1280px the sidebar replaces it
+        <details
+          className={cn(
+            'mb-6 ml-[max(0px,calc((100%-46rem)/2))] max-w-[70ch] rounded-xl border px-4 py-3 text-sm [&[open]>summary]:mb-2',
+            outline === 'sidebar' ? 'xl:hidden' : 'xl:ml-0',
+          )}
+        >
+          <summary className="cursor-pointer font-medium select-none">Contents, {top.length} sections</summary>
           <ol className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
-            {sections.map((s) => (
+            {top.map((s) => (
               <li key={s.id} className="min-w-0">
-                <a href={`#${s.id}`} className="block truncate rounded-sm text-muted-foreground hover:text-foreground">
+                <button
+                  type="button"
+                  onClick={() => jump(s.id)}
+                  className="block w-full rounded-sm text-left text-muted-foreground hover:text-foreground"
+                >
                   {s.text}
-                </a>
+                </button>
               </li>
             ))}
           </ol>
@@ -126,8 +235,9 @@ export function ZoomableArticle({ html, className, outline = false }: { html: st
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      </div>
       {shown && <Viewer shown={shown} onClose={() => setShown(null)} />}
-    </>
+    </div>
   )
 }
 

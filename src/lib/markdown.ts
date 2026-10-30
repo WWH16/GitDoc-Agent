@@ -46,7 +46,7 @@ export async function renderMarkdown(md: string): Promise<string> {
   })
 
   const used = new Set<string>()
-  doc.querySelectorAll('h2, h3').forEach((h) => {
+  doc.querySelectorAll('h2, h3, h4').forEach((h) => {
     let id = slug(h.textContent ?? '')
     for (let n = 2; used.has(id); n++) id = `${slug(h.textContent ?? '')}-${n}`
     used.add(id)
