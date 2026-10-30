@@ -1,8 +1,131 @@
+/* Hallmark · shape: Conversational FAQ, draw a33a7e (pricing swapped for the limits table; close on the run-it code, no band) · genre: modern-minimal · theme: brand · redesign: full
+ * paper: oklch(1 0 0) · accent: oklch(0.684 0.207 33.86) · display: Outfit · body: system-ui · hero: Stage · nav: slab · footer: statement · signature: the run drawn as a git branch, commits forking into the docs and the Ask index
+ * axes: light/geometric-sans/chromatic-orange · posture: restrained · contrast: pass · fold: pass · imagery: screenshots 3 (light and dark, captured from the running app) · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: P, a docs tool has little to argue; every head is a question the page answers with the product itself */
+/* Hallmark · waive 38iii · brand signature, placed once, in the hero head · the orange full stop is the logo's commit dot, the one mark the brand guide gives orange */
+/* Hallmark · dismissed F18 · data-slot="button" is shadcn's component marker on the copy buttons, not a picture slot */
+/* Hallmark · dropped #features, onClick={restart} · the features anchor and the Replay control belonged to the drawn demo the screenshots replace */
+/* Hallmark · reworded every section head into the question it answers ("One repository in, two things out" to "What happens when I paste a repo?", "Run it locally" to "How do I run it?", "Ask, and see where the answer came from" to "Can I ask about the code?", "2. Add your n8n keys" to "2. Add your keys", "3. Start the app" to "4. Start it"; id features dropped) · the shape is Conversational FAQ; the Pinecone and keys copy was out of date */
+/* Hallmark · dropped "Docs you can read, with diagrams", "An AI agent inside an n8n workflow", "Document your next repository", #features · the docs now show in the hero capture, the stack folds into the run graph, and the draw leaves out the closing band; 603 words down to 359 */
+/* Hallmark · dismissed 48 · the 21 literals sit in index.css's .dark block, the project's declared dark theme block that Tailwind's dark variant needs */
 @import "./index.css";
 
-/* Outfit (loaded in index.html) is geometric like the custom wordmark; headings only, body stays system UI */
+/* Outfit (loaded in index.html) is geometric like the custom wordmark; heads only, body stays the system face */
 @theme {
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  /* The page's one ease-out curve: a quick start that settles in (ease-out-quart utility) */
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  /* Hallmark's type scale (layout.md § 2), for the landing page only */
+  --text-display: clamp(2.75rem, 5vw + 1rem, 5.25rem);
+  --text-display-s: clamp(2.25rem, 4vw + 0.5rem, 3.75rem);
+  --text-section: clamp(2rem, 2.5vw + 1rem, 3.5rem);
+  --text-title: clamp(1.25rem, 0.75vw + 0.875rem, 1.625rem);
+  --text-lead: clamp(1.125rem, 0.35vw + 1rem, 1.375rem);
+}
+
+:root {
+  --container: 1440px;
+  --gutter: 64px;
+  --section-gap-s: 120px;
+  --section-gap: 144px;
+  --section-gap-l: 176px;
+}
+@media (max-width: 60rem) {
+  :root {
+    --gutter: 24px;
+    --section-gap-s: 80px;
+    --section-gap: 96px;
+    --section-gap-l: 120px;
+  }
+}
+@media (max-width: 40rem) {
+  :root {
+    --gutter: 16px;
+    --section-gap-s: 56px;
+    --section-gap: 72px;
+    --section-gap-l: 96px;
+  }
+}
+
+@layer base {
+  html,
+  body {
+    overflow-x: clip;
+  }
+  html {
+    scroll-padding-top: 6rem;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 22%, transparent);
+    color: var(--foreground);
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-synthesis: none;
+    overflow-wrap: break-word;
+    min-width: 0;
+    text-wrap: balance;
+  }
+  h1 {
+    font-size: var(--text-display);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+  }
+  h2 {
+    font-size: var(--text-section);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    max-width: 30ch;
+  }
+  h3 {
+    font-size: var(--text-title);
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    max-width: var(--container);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+  }
+  /* A screenshot of the running app: the theme's radius and an inset keyline, never a drawn browser frame */
+  .shot {
+    position: relative;
+    overflow: hidden;
+    margin: 0;
+    border-radius: 1rem;
+    background: var(--muted);
+  }
+  .shot > img {
+    display: block;
+    max-width: none;
+  }
+  .shot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    outline: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+    outline-offset: -1px;
+    pointer-events: none;
+  }
 }

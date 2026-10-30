@@ -26,5 +26,15 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/landing.tsx"></script>
+    <!-- Swaps a screenshot slot for another file without touching the layout: hallmarkSlots({ generate: 'new.webp' }) -->
+    <script>
+      window.hallmarkSlots = (m) => {
+        for (const [k, v] of Object.entries(m)) {
+          const s = document.querySelector(`[data-slot="${k}"]`)
+          const im = s && s.querySelector(':scope > img')
+          if (im) im.src = typeof v === 'string' ? v : v.src
+        }
+      }
+    </script>
   </body>
 </html>

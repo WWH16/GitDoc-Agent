@@ -1,35 +1,37 @@
-import { ArrowRight, ArrowUp, Check, ChevronUp, Circle, Copy, Download, FileCode, FileText, Loader2, RotateCcw } from 'lucide-react'
-import { Fragment, StrictMode, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Check, Copy } from 'lucide-react'
+import { StrictMode, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { GitHubIcon } from '@/components/github-icon'
 import { Logo } from '@/components/logo'
-import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { STEPS, URL_PLACEHOLDER } from './api'
 import './landing.css'
 
 // Everything here is true of the product today: no testimonials, numbers or pricing (see PRODUCT.md).
+// The screenshots are the running app documenting this very repository (public/landing).
 const REPO_URL = 'https://github.com/WWH16/GitDoc-Agent'
 const APP_URL = '/app/'
-const CONTAINER = 'mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8'
-const SECTION = 'scroll-mt-16 border-t py-20 sm:py-28'
-const H2 = 'font-display text-3xl font-semibold tracking-[-0.025em] text-balance sm:text-4xl'
-const LEAD = 'mt-4 max-w-xl text-lg text-pretty text-muted-foreground'
-// Mock-ups are decorative copies of the real app UI: hidden from screen readers and skipped by the keyboard
-const MOCK =
-  'min-w-0 rounded-2xl border bg-card text-card-foreground shadow-[0_24px_64px_-28px_rgb(0_0_0/0.3)] dark:shadow-[0_24px_64px_-28px_rgb(0_0_0/0.9)]'
+const LEAD = 'max-w-[52ch] text-lead leading-[1.45] text-pretty text-muted-foreground'
 const CODE = 'rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.85em]'
-
-// Motion token for state changes (enter, colour). The stepper line is driven frame by frame instead (see HowItWorks).
 const QUICK = 'duration-200 ease-out-quart motion-reduce:transition-none'
 
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+// The page has no theme toggle: the saved theme is applied before first paint (index.html), so read it once
+const DARK = document.documentElement.classList.contains('dark')
 
-// Live, so switching the OS setting while the page is open takes effect at once.
-// With it on, animations show their finished state instead of playing.
+const phoneQuery = matchMedia('(max-width: 40rem)')
+function usePhone() {
+  return useSyncExternalStore(
+    (onChange) => {
+      phoneQuery.addEventListener('change', onChange)
+      return () => phoneQuery.removeEventListener('change', onChange)
+    },
+    () => phoneQuery.matches,
+  )
+}
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
 function useReducedMotion() {
   return useSyncExternalStore(
     (onChange) => {
@@ -38,29 +40,6 @@ function useReducedMotion() {
     },
     () => reducedMotion.matches,
   )
-}
-
-// Plays a timed sequence once its element is 40% on screen: returns how many steps have run and a restart.
-// `delays` must be a module constant. With reduced motion it sits on the last step (the finished state).
-function useSequence<T extends Element>(delays: number[]) {
-  const ref = useRef<T>(null)
-  const reduced = useReducedMotion()
-  const [inView, setInView] = useState(false)
-  const [step, setStep] = useState(0)
-
-  useEffect(() => {
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && setInView(true), { threshold: 0.4 })
-    io.observe(ref.current!)
-    return () => io.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!inView || reduced || step >= delays.length) return
-    const id = setTimeout(() => setStep((s) => s + 1), delays[step])
-    return () => clearTimeout(id)
-  }, [inView, reduced, step, delays])
-
-  return { ref, step: reduced ? delays.length : step, restart: () => setStep(0), reduced }
 }
 
 function Landing() {
@@ -76,10 +55,11 @@ function Landing() {
       <main id="main">
         <Hero />
         <HowItWorks />
-        <Features />
-        <UnderTheHood />
-        <RunLocally />
-        <FinalCta />
+        <AskSection />
+        <Private />
+        <Cache />
+        <Limits />
+        <RunIt />
       </main>
       <Footer />
     </>
@@ -88,29 +68,34 @@ function Landing() {
 
 const NAV = [
   ['How it works', '#how'],
-  ['Features', '#features'],
-  ['Run it locally', '#run'],
+  ['Limits', '#limits'],
+  ['Run it', '#run'],
 ] as const
 
+// A slab: one solid full-width bar in the ink, so it reads as chrome without blurring the page under it
 function Header() {
   return (
-    <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-      <div className={cn(CONTAINER, 'flex h-16 items-center gap-8')}>
-        <a href="#top" className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+    <header className="sticky top-0 z-20 bg-foreground text-background">
+      <div className="container flex h-16 items-center gap-8">
+        <a href="#top" aria-label="GitDoc Agent, back to top" className="rounded-md">
           <Logo />
         </a>
         <nav aria-label="Page sections" className="hidden gap-6 text-sm md:flex">
           {NAV.map(([label, href]) => (
-            <a key={href} href={href} className="text-muted-foreground transition-colors hover:text-foreground">
+            <a key={href} href={href} className={cn('rounded-sm text-background/75 transition-colors hover:text-background', QUICK)}>
               {label}
             </a>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          <a href={REPO_URL} aria-label="GitDoc Agent on GitHub" className={buttonVariants({ variant: 'ghost', size: 'icon' })}>
+          <a
+            href={REPO_URL}
+            aria-label="GitDoc Agent on GitHub"
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'text-background hover:bg-background/10 hover:text-background')}
+          >
             <GitHubIcon className="size-5" />
           </a>
-          <a href={APP_URL} className={buttonVariants()}>
+          <a href={APP_URL} className={cn(buttonVariants(), 'bg-background text-foreground hover:bg-background/90 active:translate-y-px')}>
             Open the app
           </a>
         </div>
@@ -119,23 +104,66 @@ function Header() {
   )
 }
 
+/** A region of a capture: `x`, `y` and `w` in the capture's CSS pixels (`base` wide, `tall` high), shown in a frame at
+ *  `ratio`. Captures are 2x. */
+type Crop = { file: string; x?: number; y?: number; w: number; ratio: number; base?: number; tall?: number }
+
+/** A screenshot of the running app, cropped. Below 40rem the `phone` crop (a 390px-wide capture) replaces it,
+ *  so a phone never gets a picture of words too small to read. */
+function Shot({
+  name,
+  alt,
+  desktop,
+  phone,
+  priority = false,
+  className,
+}: {
+  name: string
+  alt: string
+  desktop: Crop
+  phone?: Crop
+  priority?: boolean
+  className?: string
+}) {
+  const small = usePhone()
+  const { file, x = 0, y = 0, w, ratio, base = 1440, tall = base === 1440 ? 900 : 844 } = small && phone ? phone : desktop
+  const img: CSSProperties = {
+    position: 'absolute',
+    width: `${(base / w) * 100}%`,
+    left: `${(-x / w) * 100}%`,
+    top: `${(-y / (w / ratio)) * 100}%`,
+  }
+  return (
+    <figure className={cn('shot', className)} style={{ aspectRatio: ratio }} data-slot={name} data-kind="product" data-alt={alt}>
+      <img
+        key={file}
+        src={`/landing/${file}-${DARK ? 'dark' : 'light'}.webp`}
+        alt={alt}
+        width={base * 2}
+        height={tall * 2}
+        style={img}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : 'auto'}
+        decoding="async"
+      />
+    </figure>
+  )
+}
+
+// Stage: the head on about five and a half columns, the product on the rest
 function Hero() {
   return (
-    <section id="top" className="relative isolate overflow-hidden">
-      {/* Faint grid of commit dots behind the demo */}
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-[radial-gradient(var(--border)_1.5px,transparent_1.5px)] bg-[size:22px_22px] [mask-image:radial-gradient(ellipse_60%_70%_at_75%_45%,black,transparent)]"
-      />
-      <div className={cn(CONTAINER, 'grid items-center gap-14 pt-14 pb-24 sm:pt-20 lg:grid-cols-[1fr_1.05fr] lg:gap-12 lg:pt-24 lg:pb-32')}>
-        <div>
-          <h1 className="font-display text-5xl leading-[1.02] font-semibold tracking-[-0.035em] text-balance sm:text-6xl lg:text-7xl">
-            Paste a repo. Get its docs<span className="text-brand">.</span>
+    <section id="top" className="pt-16 pb-[var(--section-gap-s)] lg:flex lg:min-h-[calc(100dvh-4rem)] lg:items-center lg:py-16">
+      <div className="container grid items-center gap-x-16 gap-y-12 lg:grid-cols-[11fr_13fr]">
+        <div className="min-w-0">
+          {/* One sentence a line: each stays whole at every width from 320px */}
+          <h1>
+            <span className="block sm:whitespace-nowrap">Paste a repo.</span>
+            <span className="block sm:whitespace-nowrap">
+              Get its docs<span className="text-brand">.</span>
+            </span>
           </h1>
-          <p className="mt-6 max-w-xl text-lg text-pretty text-muted-foreground sm:text-xl">
-            GitDoc Agent reads a GitHub repository, writes its documentation with diagrams, and answers your questions about the
-            code, showing the files each answer came from.
-          </p>
+          <p className={cn(LEAD, 'mt-6')}>Readable docs with diagrams, then answers about the code, with sources.</p>
           {/* Plain GET form: the app reads ?repo= and fills in the field */}
           <form action={APP_URL} method="get" className="mt-10 max-w-xl space-y-2">
             <label htmlFor="hero-repo" className="block text-sm font-medium">
@@ -144,216 +172,84 @@ function Hero() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative flex-1">
                 <GitHubIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="hero-repo" name="repo" type="url" required placeholder={URL_PLACEHOLDER} className="pl-9" />
+                <Input
+                  id="hero-repo"
+                  name="repo"
+                  type="url"
+                  required
+                  placeholder={URL_PLACEHOLDER}
+                  className="h-12 border-muted-foreground pl-9 sm:h-12"
+                />
               </div>
-              <Button type="submit">
+              <Button type="submit" className="h-12 px-6 active:translate-y-px sm:h-12">
                 Generate docs
-                <ArrowRight />
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground">Opens the app with this repository filled in. Works with public repositories.</p>
+            <p className="text-sm text-muted-foreground">Opens the app with this repository filled in. No account needed.</p>
           </form>
         </div>
-        <HeroDemo />
+        <Shot
+          name="generate"
+          alt="The documentation GitDoc Agent wrote for its own repository, fresh from a run"
+          desktop={{ file: 'generate', x: 440, y: 90, w: 760, ratio: 4 / 3 }}
+          phone={{ file: 'generate-phone', w: 390, ratio: 390 / 600, base: 390 }}
+          priority
+          className="min-w-0 lg:-mr-[var(--gutter)] lg:rounded-r-none"
+        />
       </div>
     </section>
   )
 }
 
-// The workflow's real n8n nodes, in order
-const NODES = ['Valid GitHub URL?', 'Group Files', 'Repository Analysis Agent', 'Combine Diagrams', 'Return Documentation']
-// How long each node "runs" in the demo, in ms; the agent step takes longest, as in a real run.
-// 4.5 s in total: under WCAG 2.2.2's 5 s limit for motion that starts on its own without a pause control.
-const NODE_MS = [600, 800, 1600, 900, 600]
-
-// Replays a run the way the Generate tab shows it. With reduced motion it starts on the finished state.
-function HeroDemo() {
-  // On phones the demo sits below the fold, so it starts only once it's on screen
-  const { ref: root, step: done, restart, reduced } = useSequence<HTMLDivElement>(NODE_MS)
-  const finished = done === NODES.length
-  const step = Math.min(done, STEPS.length - 1)
-
-  return (
-    // min-w-0 lets the grid column shrink below the mock's natural width on phones
-    <div ref={root} className="relative min-w-0">
-      <div aria-hidden inert className={cn(MOCK, 'overflow-hidden')}>
-        <div className="flex h-12 items-center justify-between gap-3 border-b px-4">
-          <Logo />
-          <div className="flex rounded-full bg-muted p-[3px] text-xs font-medium text-muted-foreground">
-            <span className="rounded-full bg-background px-2.5 py-1 text-foreground shadow-xs dark:bg-input/30">Generate</span>
-            <span className="px-2.5 py-1">Ask</span>
-            <span className="px-2.5 py-1">History</span>
-          </div>
-        </div>
-        <div className="space-y-4 p-4 sm:p-5">
-          <div className="flex gap-2">
-            <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border px-3 text-sm">
-              <GitHubIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">{REPO_URL}</span>
-            </div>
-            <span className={cn(buttonVariants({ size: 'sm' }), 'h-9 sm:h-9', !finished && 'opacity-50')}>
-              {!finished && <Loader2 className="animate-spin" />}
-              {finished ? 'Generate' : 'Generating…'}
-            </span>
-          </div>
-          <div className="space-y-3 rounded-xl border p-4">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">Run</span>
-              <Badge
-                variant="outline"
-                className={finished ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning'}
-              >
-                {finished ? 'success' : 'running'}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {finished ? 'Complete' : `Step ${step + 1} of ${STEPS.length}: ${STEPS[step][0]}`}
-            </p>
-            <Progress value={(done / NODES.length) * 100} />
-            <ol className="divide-y rounded-lg border text-sm">
-              {NODES.map((name, i) => (
-                <li key={name} className={cn('flex items-center gap-3 px-3 py-2 transition-opacity', i > done && 'opacity-40')}>
-                  {i < done ? (
-                    <Check className="size-4 shrink-0 text-success" />
-                  ) : i === done ? (
-                    <Loader2 className="size-4 shrink-0 animate-spin text-warning" />
-                  ) : (
-                    <Circle className="size-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className={cn('truncate font-mono', i === done && 'font-medium')}>{name}</span>
-                  {i === done && <span className="ml-auto shrink-0 text-muted-foreground">running…</span>}
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
-      </div>
-
-      {/* The finished DOCUMENTATION.md slides in over the corner */}
-      <div
-        aria-hidden
-        className={cn(
-          MOCK,
-          'absolute -right-3 -bottom-14 hidden w-72 p-4 transition-[opacity,translate] ease-out-quart motion-reduce:transition-none sm:block lg:-right-8',
-          // A larger card, so it enters slower than QUICK (300 ms) and leaves faster on Replay (150 ms)
-          finished ? 'translate-y-0 opacity-100 duration-300' : 'translate-y-4 opacity-0 duration-150',
-        )}
-      >
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <FileText className="size-4" />
-          DOCUMENTATION.md
-          <span className="ml-auto size-2 rounded-full bg-brand" />
-        </div>
-        <p className="mt-3 text-lg font-semibold tracking-tight">GitDoc Agent</p>
-        <p className="mt-1 text-xs text-muted-foreground">A web app for an n8n workflow that documents GitHub repositories.</p>
-        <Flow className="mt-3 text-[11px]" />
-      </div>
-
-      {/* Always rendered so the page doesn't shift when it appears */}
-      {!reduced && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={restart}
-          disabled={!finished}
-          className={cn('mt-3 text-muted-foreground', !finished && 'invisible')}
-        >
-          <RotateCcw />
-          Replay
-        </Button>
-      )}
-    </div>
-  )
-}
-
-const FLOW = ['Browser', 'Vite dev proxy', 'n8n workflow', 'Gemini + Pinecone']
-
-// `active` lights one box and the arrow into it, so a request can be traced along the flow
-function Flow({ className, active = -1 }: { className?: string; active?: number }) {
-  return (
-    <div className={cn('flex flex-wrap items-center gap-1.5 font-mono', className)}>
-      {FLOW.map((box, i) => (
-        <Fragment key={box}>
-          {i > 0 && (
-            <ArrowRight
-              className={cn('size-3 shrink-0 transition-colors', QUICK, i === active ? 'text-foreground' : 'text-muted-foreground')}
-            />
-          )}
-          <span
-            className={cn(
-              'rounded-md border px-2 py-1 transition-colors',
-              QUICK,
-              i === active ? 'border-foreground bg-muted' : 'bg-background',
-            )}
-          >
-            {box}
-          </span>
-        </Fragment>
-      ))}
-    </div>
-  )
-}
-
-const STEP_NOTES = [
-  'Makes sure the link is a GitHub repository the workflow can read.',
-  'Fetches the code and groups the files for the agent.',
-  'The Repository Analysis Agent reads the code and writes the docs.',
-  'Diagrams are drawn and combined into the document.',
-  'The finished Markdown comes back to the app.',
+// The run drawn as a git graph, as in the logo: five commits in a line, then a branch into the two things a run makes.
+// Scrolling fills the line at the speed you scroll; stop and it carries on by itself. Reduced motion shows it filled.
+const NOTES = [
+  'Checks it is a public GitHub repo.',
+  'Fetches and groups the files.',
+  'The agent writes the docs.',
+  'Diagrams go into the document.',
+  'The Markdown comes back.',
 ]
-
-// Drawn like a git graph: commits on one line, then a branch, as in the logo.
-// It plays like a stepper. Scrolling drives it, at the speed you scroll; stop scrolling and it carries on by itself.
-// The line fills out of the running step; when it reaches the next circle, that step gets its check.
-// Waiting steps keep readable text (4.5:1); only the circles, line and title colour show progress.
 const TRACK = 'bg-muted-foreground/25'
-const STEP_MS = 700 // auto-play speed: one step per 700 ms
-const IDLE_MS = 400 // how long without scrolling counts as "not scrolling"
-const FOLLOW_MS = 120 // smoothing: the fill eases toward the scroll position with this time constant
-
+const STEP_MS = 700
+const IDLE_MS = 400
+const FOLLOW_MS = 120
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 function HowItWorks() {
   const reduced = useReducedMotion()
   const graph = useRef<HTMLDivElement>(null)
   const fills = useRef<(HTMLSpanElement | null)[]>([])
-  // Steps completed so far; STEPS.length means the run is done
   const [progress, setProgress] = useState(0)
   const done = reduced ? STEPS.length : progress
   const finished = done === STEPS.length
 
-  // One rAF loop, running only while the graph is on screen. The fills are written straight to the DOM each frame;
-  // React only re-renders when a whole step completes. Progress only moves forward.
+  // One rAF loop while the graph is on screen; each fill's --fill is written straight to the DOM every frame
   useEffect(() => {
-    const N = STEPS.length
-    // React clears the fills' transform itself when `style` switches to undefined
     if (reduced) return
+    const N = STEPS.length
     const el = graph.current!
     let p = 0
     let auto = 0
     let lastScroll = -Infinity
     let last = 0
     let raf = 0
-
-    // 0 when the graph's top reaches 85% of the viewport, N when its bottom reaches 60%
     const scrollTarget = () => {
       const r = el.getBoundingClientRect()
       const start = innerHeight * 0.85
       const end = innerHeight * 0.6
       return clamp01((start - r.top) / (start - end + r.height)) * N
     }
-
     const frame = (now: number) => {
       const dt = last ? Math.min(now - last, 100) : 16
       last = now
       if (now - lastScroll > IDLE_MS) auto = Math.max(auto, p) + dt / STEP_MS
       const goal = Math.min(N, Math.max(p, scrollTarget(), auto))
       p = goal - p < 0.001 ? goal : p + (goal - p) * (1 - Math.exp(-dt / FOLLOW_MS))
-      fills.current.forEach((f, i) => f && (f.style.transform = `scaleY(${clamp01(p - i)})`))
+      fills.current.forEach((f, i) => f?.style.setProperty('--fill', String(clamp01(p - i))))
       setProgress(Math.floor(p + 1e-6))
       raf = p < N ? requestAnimationFrame(frame) : 0
     }
-
     const onScroll = () => (lastScroll = performance.now())
     const io = new IntersectionObserver(([e]) => {
       cancelAnimationFrame(raf)
@@ -369,35 +265,48 @@ function HowItWorks() {
     }
   }, [reduced])
 
+  const line = (on: boolean) => (on ? 'bg-foreground' : TRACK)
+
   return (
-    <section id="how" className={SECTION}>
-      <div className={cn(CONTAINER, 'grid gap-12 lg:grid-cols-[1fr_1.15fr] lg:gap-16')}>
-        <div>
-          <h2 className={H2}>One repository in, two things out</h2>
-          <p className={LEAD}>
-            Every run goes through the same five steps in an n8n workflow. It usually takes a few minutes, and the app shows which
-            step is running the whole time.
+    <section id="how" className="scroll-mt-16 border-t py-[var(--section-gap)]">
+      <div className="container">
+        <div className="max-w-3xl">
+          <h2>What happens when I paste a repo?</h2>
+          <p className={cn(LEAD, 'mt-5')}>
+            An AI agent in one n8n workflow: five steps, then a branch.
           </p>
         </div>
-        <div ref={graph}>
-          <ol>
+
+        <div ref={graph} className="mt-16">
+          <ol className="grid lg:grid-cols-5 lg:gap-x-8">
             {STEPS.map(([label], i) => (
-              <li key={label} className="relative pb-9 pl-11">
-                {/* Segment to the next commit: a muted track; the rAF loop above sets the fill's scaleY */}
-                <span aria-hidden className={cn('absolute top-6 -bottom-0.5 left-[11px] w-0.5', TRACK)}>
+              <li key={label} className="relative pb-9 pl-11 lg:pt-11 lg:pb-0">
+                {/* Down to the next commit on phones, across on wide screens; the last one runs on into the branch */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute top-6 -bottom-0.5 left-[11px] w-0.5',
+                    TRACK,
+                    i < STEPS.length - 1
+                      ? 'lg:top-[11px] lg:right-[-2rem] lg:bottom-auto lg:left-6 lg:h-0.5 lg:w-auto'
+                      : 'lg:bottom-0',
+                  )}
+                >
                   <span
                     ref={(f) => {
                       fills.current[i] = f
                     }}
-                    // Starts empty; a constant prop, so re-renders never reset what the loop has drawn
-                    style={reduced ? undefined : { transform: 'scaleY(0)' }}
-                    className="block size-full origin-top bg-foreground"
+                    style={{ '--fill': reduced ? 1 : 0 } as CSSProperties}
+                    className={cn(
+                      'block size-full origin-top bg-foreground [transform:scaleY(var(--fill))]',
+                      i < STEPS.length - 1 && 'lg:origin-left lg:[transform:scaleX(var(--fill))]',
+                    )}
                   />
                 </span>
                 <span
                   aria-hidden
                   className={cn(
-                    'absolute top-0.5 left-0 grid size-6 place-items-center rounded-full border-[3px] transition-[background-color,border-color,box-shadow]',
+                    'absolute top-0.5 left-0 grid size-6 place-items-center rounded-full border-[3px] transition-[background-color,border-color,box-shadow] lg:top-0',
                     QUICK,
                     i < done
                       ? 'border-foreground bg-foreground text-background'
@@ -406,35 +315,53 @@ function HowItWorks() {
                         : 'border-muted-foreground/40 bg-background',
                   )}
                 >
-                  {i < done && <Check strokeWidth={3} className="size-3.5 animate-in fade-in zoom-in-50 duration-200 motion-reduce:animate-none" />}
+                  {i < done && <Check strokeWidth={3} className="size-3.5" />}
                 </span>
-                <h3 className={cn('font-display text-lg font-semibold transition-colors', QUICK, i > done && 'text-muted-foreground')}>
-                  {label}
-                </h3>
-                <p className="mt-1 text-muted-foreground">{STEP_NOTES[i]}</p>
+                <h3 className={cn('transition-colors lg:text-xl', QUICK, i > done && 'text-muted-foreground')}>{label}</h3>
+                <p className="mt-2 text-muted-foreground">{NOTES[i]}</p>
               </li>
             ))}
           </ol>
-          {/* Docs return first, then the Ask indexing branch runs */}
-          <div className="relative grid gap-8 sm:grid-cols-2 sm:gap-6">
+
+          {/* The branch: under the last commit on wide screens, after the line on phones */}
+          <div className="relative grid gap-8 sm:grid-cols-2 sm:gap-6 lg:mt-16 lg:grid-cols-5 lg:gap-x-8">
+            <span aria-hidden className={cn('absolute top-0 bottom-8 left-[11px] w-0.5 transition-colors sm:hidden', QUICK, line(finished))} />
             <span
               aria-hidden
               className={cn(
-                'absolute top-0 bottom-8 left-[11px] w-0.5 transition-colors sm:hidden',
-                QUICK,
-                finished ? 'bg-foreground' : TRACK,
-              )}
-            />
-            <span
-              aria-hidden
-              className={cn(
-                'absolute -top-6 left-[11px] hidden h-[26px] w-[calc(50%+0.75rem+2px)] rounded-tr-xl border-t-2 border-r-2 transition-colors sm:block',
+                'absolute -top-6 left-[11px] hidden h-[26px] w-[calc(50%+0.75rem+2px)] rounded-tr-xl border-t-2 border-r-2 transition-colors sm:block lg:hidden',
                 QUICK,
                 finished ? 'border-foreground' : 'border-muted-foreground/25',
               )}
             />
-            <Output on={finished} name="DOCUMENTATION.md" text="Preview it in the app, then download it." />
-            <Output on={finished} name="Ask index" text="The source goes into Pinecone, so Ask can answer questions about it." />
+            <Output
+              on={finished}
+              name="Ask index"
+              text="Gemini embeds the code into Supabase for Ask."
+              className="lg:col-start-4"
+              connector={
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute top-[-2rem] left-[11px] hidden h-[34px] w-[calc(100%+2rem)] rounded-tl-xl border-t-2 border-l-2 transition-colors lg:block',
+                    QUICK,
+                    finished ? 'border-foreground' : 'border-muted-foreground/25',
+                  )}
+                />
+              }
+            />
+            <Output
+              on={finished}
+              name="DOCUMENTATION.md"
+              text="Preview it, then download it."
+              className="lg:col-start-5"
+              connector={
+                <span
+                  aria-hidden
+                  className={cn('absolute -top-16 left-[11px] hidden h-16 w-0.5 transition-colors lg:block', QUICK, line(finished))}
+                />
+              }
+            />
           </div>
         </div>
       </div>
@@ -443,9 +370,10 @@ function HowItWorks() {
 }
 
 // Orange marks the agent's work, as the orange commit does in the logo
-function Output({ on, name, text }: { on: boolean; name: string; text: string }) {
+function Output({ on, name, text, className, connector }: { on: boolean; name: string; text: string; className?: string; connector: ReactNode }) {
   return (
-    <div className="relative pl-11">
+    <div className={cn('relative pl-11 lg:pt-11', className)}>
+      {connector}
       <span
         aria-hidden
         className={cn(
@@ -454,166 +382,102 @@ function Output({ on, name, text }: { on: boolean; name: string; text: string })
           on ? 'scale-100 border-brand bg-brand' : 'scale-75 border-muted-foreground/40 bg-background',
         )}
       />
-      <h3 className={cn('font-mono text-base font-semibold transition-colors', QUICK, !on && 'text-muted-foreground')}>{name}</h3>
-      <p className="mt-1 text-muted-foreground">{text}</p>
+      <h3 className={cn('font-mono text-base font-semibold tracking-normal transition-colors', QUICK, !on && 'text-muted-foreground')}>{name}</h3>
+      <p className="mt-2 text-muted-foreground">{text}</p>
     </div>
   )
 }
 
-function Features() {
+// Showcase: the head, then the Ask tab across the whole width
+function AskSection() {
   return (
-    <section id="features" className={SECTION}>
-      <div className={cn(CONTAINER, 'space-y-24 sm:space-y-32')}>
-        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
-          <div>
-            <h2 className={H2}>Docs you can read, with diagrams</h2>
-            <p className={LEAD}>
-              The agent writes a Markdown document from the code and draws diagrams into it. Preview it in the browser, then download
-              it as <code className={CODE}>DOCUMENTATION.md</code>.
-            </p>
-          </div>
-          <DocsMock />
+    <section className="border-t py-[var(--section-gap-l)]">
+      <div className="container">
+        <div className="max-w-3xl">
+          <h2>Can I ask about the code?</h2>
+          <p className={cn(LEAD, 'mt-5')}>Yes. Each answer lists the files it came from, so you can check it.</p>
         </div>
-        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
-          <div className="lg:order-2">
-            <h2 className={H2}>Ask, and see where the answer came from</h2>
-            <p className={LEAD}>
-              After a run, the repository's source is indexed. Ask about it in plain language and follow up in the same chat. Each
-              answer lists the files it used, so you can check it.
-            </p>
-          </div>
-          <AskMock />
+        <Shot
+          name="ask"
+          alt="The Ask tab answering where the n8n keys are added to requests, with vite.config.ts as its source"
+          desktop={{ file: 'ask', x: 230, y: 150, w: 1000, ratio: 16 / 9 }}
+          phone={{ file: 'ask-phone', y: 64, w: 390, ratio: 390 / 700, base: 390 }}
+          className="mt-16"
+        />
+      </div>
+    </section>
+  )
+}
+
+// The sign-up dialog is captured on its own, at its real size (416 x 312)
+const SIGNUP = { w: 416, ratio: 416 / 312, base: 416, tall: 312 }
+
+// Split, the picture on the left this once
+function Private() {
+  return (
+    <section className="border-t py-[var(--section-gap)]">
+      <div className="container grid items-center gap-x-16 gap-y-10 lg:grid-cols-[6fr_6fr]">
+        <Shot
+          name="signup"
+          alt="The Create an account dialog, offering to keep this browser's one doc on any device"
+          desktop={{ file: 'signup', ...SIGNUP }}
+          className="mx-auto w-full max-w-[34rem] min-w-0"
+        />
+        <div className="min-w-0">
+          <h2>Who can see my docs?</h2>
+          <p className={cn(LEAD, 'mt-5')}>Only you. You start without an account, and this browser keeps your docs and chats.</p>
+          <p className="mt-4 max-w-[52ch] text-muted-foreground">
+            Sign up with an email to open them on any device.{' '}
+            <a href={APP_URL} className="font-medium text-foreground underline underline-offset-4 hover:text-muted-foreground">
+              Open the app
+            </a>
+          </p>
         </div>
       </div>
     </section>
   )
 }
 
-const TREE = `src/
-├─ App.tsx        Generate, Ask and History
-├─ api.ts         calls to the n8n workflow
-└─ components/    shared UI
-vite.config.ts    dev proxy that adds the n8n keys`
-
-// A request travels the flow diagram once: each box lights in turn, then all rest
-const FLOW_MS = [500, 450, 450, 450, 700]
-
-function DocsMock() {
-  const { ref, step } = useSequence<HTMLDivElement>(FLOW_MS)
-
+// Statement: the answer set large
+function Cache() {
   return (
-    <div ref={ref} aria-hidden inert className={MOCK}>
-      <div className="flex items-center gap-3 border-b px-5 py-4">
-        <div className="min-w-0">
-          <p className="font-semibold">Documentation</p>
-          <p className="truncate text-sm text-muted-foreground">Preview of the generated DOCUMENTATION.md</p>
-        </div>
-        <span className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'ml-auto h-8 sm:h-8')}>
-          <Download />
-          Download .md
-        </span>
-      </div>
-      <div className="space-y-4 p-5 text-sm">
-        <p className="text-2xl font-semibold tracking-tight">GitDoc Agent</p>
-        <p className="text-muted-foreground">
-          A React web app for an n8n workflow that turns a GitHub repository into documentation and answers questions about its
-          code.
+    <section className="border-t py-[var(--section-gap-s)]">
+      <div className="container">
+        <h2 className="text-title tracking-[-0.015em] text-muted-foreground">Does the same repo run twice?</h2>
+        <p className="mt-6 max-w-[24ch] font-display text-display-s leading-[1.08] font-semibold tracking-[-0.03em] text-balance">
+          No. If its code has not changed, the docs come back at once.
         </p>
-        <p className="pt-1 text-lg font-semibold tracking-tight">How a request flows</p>
-        <Flow className="text-xs" active={step >= 1 && step <= FLOW.length ? step - 1 : -1} />
-        <p className="pt-1 text-lg font-semibold tracking-tight">Project structure</p>
-        <pre className="overflow-x-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">{TREE}</pre>
+        <p className="mt-6 text-muted-foreground">Press Regenerate when you want a fresh run.</p>
+        <Shot
+          name="cache"
+          alt="The docs card saying Loaded from cache, beside its Regenerate and Download buttons"
+          desktop={{ file: 'cache', x: 440, y: 100, w: 990, ratio: 990 / 125 }}
+          className="mt-12 hidden sm:block"
+        />
       </div>
-    </div>
+    </section>
   )
 }
 
-// The exchange plays once, as in the Ask tab: question, "Searching the code…", answer, then its sources.
-// Everything keeps its final size from the start, so the page never shifts.
-const ASK_MS = [400, 500, 1500, 350]
-const SOURCES = ['vite.config.ts', 'src/api.ts']
-const ENTER = 'transition-[opacity,translate,scale] duration-300 ease-out-quart motion-reduce:transition-none'
-
-function AskMock() {
-  const { ref, step } = useSequence<HTMLDivElement>(ASK_MS)
-
-  return (
-    <div ref={ref} aria-hidden inert className={cn(MOCK, 'space-y-6 p-5 text-sm sm:p-6')}>
-      <p
-        className={cn(
-          'ml-auto w-fit max-w-[85%] origin-bottom-right rounded-2xl bg-muted px-4 py-2.5',
-          ENTER,
-          step >= 1 ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
-        )}
-      >
-        Where are the n8n keys added to requests?
-      </p>
-      <div className="relative space-y-3">
-        <p
-          className={cn(
-            'absolute top-0 text-muted-foreground transition-opacity',
-            QUICK,
-            step === 2 ? 'opacity-100 motion-safe:animate-pulse' : 'opacity-0',
-          )}
-        >
-          Searching the code…
-        </p>
-        <p className={cn('leading-relaxed', ENTER, step >= 3 ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0')}>
-          In the Vite dev proxy. <code className={CODE}>vite.config.ts</code> reads <code className={CODE}>N8N_WEBHOOK_TOKEN</code>{' '}
-          and <code className={CODE}>N8N_API_KEY</code> from <code className={CODE}>.env</code> and adds them as headers on the{' '}
-          <code className={CODE}>/api</code> routes, so the browser never sees them.
-        </p>
-        <p className={cn('flex items-center gap-1 text-xs text-muted-foreground', ENTER, step >= 4 ? 'opacity-100' : 'opacity-0')}>
-          {SOURCES.length} sources
-          <ChevronUp className="size-3.5" />
-        </p>
-        <ul className="flex flex-wrap gap-1.5">
-          {SOURCES.map((src, j) => (
-            <li
-              key={src}
-              style={{ transitionDelay: step >= 4 ? `${(j + 1) * 60}ms` : '0ms' }}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground',
-                ENTER,
-                step >= 4 ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0',
-              )}
-            >
-              <FileCode className="size-3.5" />
-              <code className="font-mono">{src}</code>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="flex items-center gap-2 rounded-2xl border p-2 pl-4 shadow-xs">
-        <span className="flex-1 text-muted-foreground">Ask anything about the code</span>
-        <span className="grid size-9 place-items-center rounded-full bg-primary text-primary-foreground opacity-50">
-          <ArrowUp className="size-4" />
-        </span>
-      </div>
-    </div>
-  )
-}
-
-const STACK = [
-  ['n8n', 'Runs the workflow and saves each step, so the app can show live progress.'],
-  ['Gemini', 'The model behind the agent that writes the docs and answers questions.'],
-  ['Pinecone', 'Holds the indexed source code that Ask searches.'],
-  ['Vite dev proxy', 'Adds your n8n keys to each request, so they never reach the browser.'],
+const LIMITS = [
+  ['Repositories', 'Public GitHub repositories.'],
+  ['Generate', '5 runs an hour and 15 a day, for each account.'],
+  ['Ask', '30 questions an hour, for each account.'],
+  ['Waiting', 'A run usually takes a few minutes; an answer, up to two.'],
+  ['Hosting', 'Not hosted yet. It runs on your machine, next to n8n.'],
 ] as const
 
-function UnderTheHood() {
+// Rows: the head beside a table of plain facts (the limits are the ones the API enforces, server/guard.ts)
+function Limits() {
   return (
-    <section className={SECTION}>
-      <div className={cn(CONTAINER, 'grid gap-12 lg:grid-cols-[1fr_1.4fr] lg:gap-16')}>
-        <div>
-          <h2 className={H2}>An AI agent inside an n8n workflow</h2>
-          <p className={LEAD}>The workflow does the work. The web app starts runs, shows their progress and hosts the chat.</p>
-        </div>
-        <dl className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
-          {STACK.map(([name, text]) => (
-            <div key={name} className="border-t pt-4">
-              <dt className="font-medium">{name}</dt>
-              <dd className="mt-1 text-muted-foreground">{text}</dd>
+    <section id="limits" className="scroll-mt-16 border-t py-[var(--section-gap)]">
+      <div className="container grid gap-x-8 gap-y-10 lg:grid-cols-12">
+        <h2 className="lg:col-span-4">How many runs do I get?</h2>
+        <dl className="lg:col-span-8">
+          {LIMITS.map(([term, detail]) => (
+            <div key={term} className="grid gap-1 border-t py-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr] sm:gap-8">
+              <dt className="font-display text-title font-semibold tracking-[-0.015em]">{term}</dt>
+              <dd className="text-lead text-muted-foreground">{detail}</dd>
             </div>
           ))}
         </dl>
@@ -622,33 +486,63 @@ function UnderTheHood() {
   )
 }
 
-function RunLocally() {
+const RUN_STEPS: { title: string; note: ReactNode; code: string }[] = [
+  { title: 'Clone and install', note: null, code: `git clone ${REPO_URL}.git\ncd GitDoc-Agent\nnpm install` },
+  {
+    title: 'Add your keys',
+    note: (
+      <>
+        In a <code className={CODE}>.env</code> file in the project folder. The secret key never gets a{' '}
+        <code className={CODE}>VITE_</code> prefix.
+      </>
+    ),
+    code:
+      'N8N_WEBHOOK_TOKEN=your-webhook-token\nN8N_API_KEY=your-n8n-api-key\nVITE_SUPABASE_URL=https://your-project.supabase.co\nVITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...\nSUPABASE_SERVICE_ROLE_KEY=sb_secret_...',
+  },
+  {
+    title: 'Set up Supabase',
+    note: (
+      <>
+        Run both files in the SQL Editor, then turn on anonymous sign-ins under Authentication.
+      </>
+    ),
+    code: 'docs/supabase-setup.sql\ndocs/supabase-app.sql',
+  },
+  {
+    title: 'Start it',
+    note: (
+      <>
+        Then open <code className={CODE}>localhost:5173/app/</code>. n8n runs on port 5678 with the GitDoc Agent workflows; turn
+        on <span className="font-medium text-foreground">Save execution progress</span> for live steps.
+      </>
+    ),
+    code: 'npm run dev',
+  },
+]
+
+// Rows again, each step's command beside it: the page closes on the thing a developer does next
+function RunIt() {
   return (
-    <section id="run" className={SECTION}>
-      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-        <h2 className={H2}>Run it locally</h2>
-        <p className={LEAD}>GitDoc Agent isn't hosted yet. It runs on your machine, next to n8n.</p>
-        <ol className="mt-12 space-y-10">
-          <li>
-            <h3 className="font-display text-lg font-semibold">1. Clone and install</h3>
-            <CodeBlock code={`git clone ${REPO_URL}.git\ncd GitDoc-Agent\nnpm install`} />
-          </li>
-          <li>
-            <h3 className="font-display text-lg font-semibold">2. Add your n8n keys</h3>
-            <p className="mt-1 text-muted-foreground">
-              Create a <code className={CODE}>.env</code> file in the project folder.
-            </p>
-            <CodeBlock code={'N8N_WEBHOOK_TOKEN=your-webhook-token\nN8N_API_KEY=your-n8n-api-key'} />
-          </li>
-          <li>
-            <h3 className="font-display text-lg font-semibold">3. Start the app</h3>
-            <CodeBlock code="npm run dev" />
-            <p className="mt-3 text-muted-foreground">
-              Then open <code className={CODE}>http://localhost:5173/app/</code>. n8n must be running on port 5678 with the GitDoc Agent
-              workflow. For live step progress, turn on <span className="font-medium text-foreground">Save execution progress</span> in
-              the workflow's settings.
-            </p>
-          </li>
+    <section id="run" className="scroll-mt-16 border-t py-[var(--section-gap)]">
+      <div className="container">
+        <div className="max-w-3xl">
+          <h2>How do I connect my n8n?</h2>
+          <p className={cn(LEAD, 'mt-5')}>Run the app on your machine, next to n8n, in four steps.</p>
+        </div>
+        <ol className="mt-16">
+          {RUN_STEPS.map((s, i) => (
+            <li key={s.title} className="grid gap-x-8 gap-y-3 border-t py-8 lg:grid-cols-12">
+              <div className="lg:col-span-4">
+                <h3>
+                  <span className="text-muted-foreground tabular-nums">{i + 1}.</span> {s.title}
+                </h3>
+                {s.note && <p className="mt-2 max-w-[40ch] text-muted-foreground">{s.note}</p>}
+              </div>
+              <div className="min-w-0 lg:col-span-8">
+                <CodeBlock code={s.code} />
+              </div>
+            </li>
+          ))}
         </ol>
       </div>
     </section>
@@ -660,7 +554,7 @@ function CodeBlock({ code }: { code: string }) {
 
   return (
     // The button sits beside the scrolling code, so long lines never run under it
-    <div className="mt-3 flex items-start rounded-xl border bg-muted/50">
+    <div className="flex items-start rounded-xl border bg-muted/50">
       <pre className="min-w-0 flex-1 overflow-x-auto p-4 font-mono text-sm leading-relaxed">
         <code>{code}</code>
       </pre>
@@ -668,7 +562,7 @@ function CodeBlock({ code }: { code: string }) {
         variant="ghost"
         size="icon"
         aria-label="Copy to clipboard"
-        className="m-1.5"
+        className="m-1.5 active:translate-y-px"
         // Where the clipboard is blocked, select the text instead so Ctrl+C still works
         onClick={(e) => {
           const pre = e.currentTarget.previousElementSibling!
@@ -681,12 +575,7 @@ function CodeBlock({ code }: { code: string }) {
             .catch(() => getSelection()?.selectAllChildren(pre))
         }}
       >
-        {/* key swaps remount the icon, so each change pops in */}
-        {copied ? (
-          <Check key="done" className="text-success animate-in fade-in zoom-in-75 duration-150 motion-reduce:animate-none" />
-        ) : (
-          <Copy key="copy" className="animate-in fade-in duration-150 motion-reduce:animate-none" />
-        )}
+        {copied ? <Check className="text-success" /> : <Copy />}
       </Button>
       <span aria-live="polite" className="sr-only">
         {copied ? 'Copied' : ''}
@@ -695,40 +584,31 @@ function CodeBlock({ code }: { code: string }) {
   )
 }
 
-function FinalCta() {
-  return (
-    <section className={cn(CONTAINER, 'pb-20 sm:pb-28')}>
-      <div className="flex flex-col items-start gap-8 rounded-3xl border bg-card p-8 sm:p-12 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className={H2}>Document your next repository</h2>
-          <p className="mt-3 text-lg text-muted-foreground">Paste a URL and let the agent write the first draft.</p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <a href={APP_URL} className={buttonVariants({ size: 'lg' })}>
-            Open the app
-            <ArrowRight />
-          </a>
-          <a href={REPO_URL} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-            <GitHubIcon className="size-4" />
-            View on GitHub
-          </a>
-        </div>
-      </div>
-    </section>
-  )
-}
-
+// A statement footer: one closing sentence, the links beneath
 function Footer() {
   return (
-    <footer className="border-t">
-      <div className={cn(CONTAINER, 'flex flex-col gap-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between')}>
-        <span className="text-foreground">
-          <Logo />
-        </span>
-        <p>Not affiliated with or endorsed by GitHub.</p>
-        <a href={REPO_URL} className="transition-colors hover:text-foreground">
-          Source on GitHub
-        </a>
+    <footer className="border-t py-[var(--section-gap-s)]">
+      <div className="container">
+        <p className="max-w-[30ch] font-display text-section leading-[1.08] font-semibold tracking-[-0.025em] text-balance">
+          Every screen on this page is GitDoc Agent documenting itself.
+        </p>
+        <div className="mt-12 flex flex-col gap-6 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-foreground">
+            <Logo />
+          </span>
+          <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
+            <a href={APP_URL} className="underline-offset-4 hover:underline">
+              Open the app
+            </a>
+            <a href={REPO_URL} className="underline-offset-4 hover:underline">
+              Source on GitHub
+            </a>
+            <a href="#run" className="underline-offset-4 hover:underline">
+              Run it locally
+            </a>
+          </nav>
+          <p className="text-muted-foreground">Not affiliated with or endorsed by GitHub.</p>
+        </div>
       </div>
     </footer>
   )
