@@ -30,5 +30,6 @@ pinecone credentials.txt
 brand
 # Hallmark audit records
 .hallmark/
-# Presentation diagrams (local only)
+# Presentation diagrams and deck (local only)
 docs/diagrams/
+docs/presentation/
