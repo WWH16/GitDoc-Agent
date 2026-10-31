@@ -55,7 +55,8 @@ test('Ask blocks a jailbreak prompt', async () => {
 })
 
 test('Ask says when a repository is not indexed', async () => {
-  const r = await ask('What does this project do?', 'https://github.com/octocat/hello-world')
+  // A well-formed URL for a repository that does not exist, so no Generate run can ever index it
+  const r = await ask('What does this project do?', 'https://github.com/gitdoc-smoke/never-indexed')
   assert.equal(r.body.found, false)
   assert.deepEqual(r.body.sources, [])
 })

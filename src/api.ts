@@ -28,7 +28,8 @@ export const STEPS: [string, string | null][] = [
   ['Checking repository URL', null],
   ['Reading repository files', 'Valid GitHub URL?'],
   ['Writing documentation', 'Group Files'],
-  ['Rendering diagrams', 'Repository Analysis Agent'],
+  // Not the agent node: it also finishes when both models fail
+  ['Rendering diagrams', 'Prepare Markdown'],
   ['Finishing up', 'Combine Diagrams'],
 ]
 

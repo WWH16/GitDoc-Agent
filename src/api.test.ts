@@ -49,6 +49,9 @@ test('progress hint shows only after 10 s with no finished nodes', () => {
 test('currentStep still maps finished nodes to coarse steps', () => {
   assert.equal(currentStep(new Set()), 0)
   assert.equal(currentStep(new Set(['Valid GitHub URL?', 'Group Files'])), 2)
+  // The agent node also finishes when both models fail (error output), so it must not start "Rendering diagrams"
+  assert.equal(currentStep(new Set(['Valid GitHub URL?', 'Group Files', 'Repository Analysis Agent', 'Docs Failed'])), 2)
+  assert.equal(currentStep(new Set(['Valid GitHub URL?', 'Group Files', 'Repository Analysis Agent', 'Prepare Markdown'])), 3)
 })
 
 test('non-2xx shows body.error, else HTTP <status>', async () => {
