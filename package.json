@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node --test src/*.test.ts server/*.test.ts",
+    "smoke": "node --test --test-concurrency=1 scripts/smoke.ts",
     "preview": "vite preview"
   },
   "dependencies": {
