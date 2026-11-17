@@ -48,6 +48,13 @@ services:
         value: "200"
       - key: N8N_DIAGNOSTICS_ENABLED
         value: "false"
+      # 512 MB: Node's default heap limit (~250 MB) is too small for n8n 2.x to start. 300 MB plus the code runner
+      # peaked at 456 MB in a local test with the same memory and CPU limits.
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=300
+      # Features these workflows do not use, turned off to save memory
+      - key: N8N_DISABLED_MODULES
+        value: insights,chat-hub,mcp,mcp-registry,workflow-builder,instance-ai,breaking-changes,community-packages,data-table
 
   # The web app: `vite preview` serves the build and runs the API guard (server/guard.ts)
   - type: web
