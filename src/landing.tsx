@@ -12,7 +12,6 @@ import './landing.css'
 
 // Everything here is true of the product today: no testimonials, numbers or pricing (see PRODUCT.md).
 // The screenshots are the running app documenting this very repository (public/landing).
-const REPO_URL = 'https://github.com/WWH16/GitDoc-Agent'
 const APP_URL = '/app/'
 const LEAD = 'max-w-[52ch] text-lead leading-[1.45] text-pretty text-muted-foreground'
 const QUICK = 'duration-200 ease-out-quart motion-reduce:transition-none'
@@ -102,13 +101,6 @@ function Header() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          <a
-            href={REPO_URL}
-            aria-label="GitDoc Agent on GitHub"
-            className={buttonVariants({ variant: 'ghost', size: 'icon' })}
-          >
-            <GitHubIcon className="size-5" />
-          </a>
           <ThemeToggle />
           <a href={APP_URL} className={cn(buttonVariants(), 'active:translate-y-px')}>
             Open the app
@@ -608,12 +600,6 @@ function Footer() {
           <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
             <a href={APP_URL} className="underline-offset-4 hover:underline">
               Open the app
-            </a>
-            <a href={REPO_URL} className="underline-offset-4 hover:underline">
-              Source on GitHub
-            </a>
-            <a href={`${REPO_URL}#readme`} className="underline-offset-4 hover:underline">
-              Run it locally
             </a>
           </nav>
         </div>
