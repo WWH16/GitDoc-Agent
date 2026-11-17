@@ -12,7 +12,7 @@
 ![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss&logoColor=white)
 ![n8n](https://img.shields.io/badge/n8n-workflows-ea4b71?logo=n8n&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-auth_%2B_pgvector-3fcf8e?logo=supabase&logoColor=white)
-![Gemini](https://img.shields.io/badge/Google_Gemini-LLM_%2B_embeddings-8e75b2?logo=googlegemini&logoColor=white)
+![LLMs](https://img.shields.io/badge/LLMs-Groq_%C2%B7_OpenRouter_%C2%B7_Gemini-8e75b2)
 
 </div>
 
@@ -71,27 +71,24 @@ Paste a URL, watch the run step by step, read the result, and download it.
 
 ## How it works
 
-```mermaid
-flowchart LR
-  B[Browser<br/>React app] -- "/api/* + Supabase session" --> G[Vite dev server<br/>API guard + proxy]
-  B -- "own docs and chats (RLS)" --> S[(Supabase<br/>Auth + Postgres + pgvector)]
-  G -- "session check, rate limits, docs cache" --> S
-  G -- "webhook token" --> N[n8n workflows]
-  G -- "tree SHA lookup" --> GH[GitHub API]
-  N -- "read files (GET only)" --> GH
-  N -- "write docs, answer, embed" --> AI[Google Gemini]
-  N -- "store and search code chunks" --> S
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/how-it-works-dark.svg">
+  <img src="docs/readme/how-it-works.svg" width="100%" alt="Architecture: the web app calls an API guard, which forwards to three n8n workflows (Generate Docs, Load Repo Code, Ask Repo). The workflows call GitHub, mermaid.ink and LLM providers, and store code vectors in Supabase. The web app and the guard also use Supabase for auth, history, rate limits and the docs cache.">
+</picture>
+
+<sub>Source: [`docs/readme/how-it-works.html`](docs/readme/how-it-works.html) (light) and
+[`how-it-works-dark.html`](docs/readme/how-it-works-dark.html). The SVGs are exported from these files.</sub>
 
 1. The browser signs in anonymously with Supabase and sends every `/api` call with its access token.
 2. The **API guard** (`server/guard.ts`, a Vite plugin) checks the session, applies per-user and per-IP rate limits, and
    adds the n8n webhook token and API key on the server. The browser never sees those secrets.
 3. For `/api/generate`, the guard looks up the repository's tree SHA on GitHub. Unchanged code comes from the shared
    `docs_cache` table. Otherwise the guard calls the n8n **Generate** workflow.
-4. The Generate workflow fetches the files in parallel, has the agent write the docs, renders the diagrams, and then
-   loads the code into Supabase (`documents` table, Gemini embeddings) so Ask can search it.
-5. `/api/ask` goes to the **Ask** workflow: one vector search over that repository plus one LLM call, with a safety
-   filter in front.
+4. The Generate workflow fetches the files in parallel, has the agent write the docs (OpenRouter, with Gemini as
+   fallback), renders the diagrams through mermaid.ink, and then loads the code into Supabase (`documents` table,
+   Gemini embeddings) so Ask can search it.
+5. `/api/ask` goes to the **Ask** workflow: one vector search over that repository plus one LLM call (Groq, with Gemini
+   as fallback), with a safety filter in front.
 6. `/api/progress` builds a step timeline from n8n's execution list. Only the timeline reaches the browser, never the
    execution data, which holds repository files.
 
@@ -125,7 +122,7 @@ reference but are not part of the live path.
 | Markdown | marked, DOMPurify, highlight.js, Mermaid |
 | Server (dev) | Vite plugin middleware (`server/guard.ts`) and the Vite proxy |
 | Data and auth | Supabase Auth (anonymous and email users), Postgres with row-level security, pgvector |
-| Automation | n8n workflows calling the GitHub REST API and Google Gemini |
+| Automation | n8n workflows calling the GitHub REST API, mermaid.ink, and LLM providers (Groq, OpenRouter, Google Gemini) |
 | Quality | `node:test`, oxlint, TypeScript project references |
 
 ## Getting started
