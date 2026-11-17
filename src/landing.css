@@ -109,10 +109,16 @@
     translate: 0 2rem;
   }
 }
+/* A run-graph commit pops as it completes */
+@keyframes pop {
+  50% {
+    scale: 1.15;
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
     .reveal {
-      animation: reveal linear both;
+      animation: reveal var(--ease-out-quart) both;
       animation-timeline: view();
       animation-range: entry 0% entry 70%;
     }

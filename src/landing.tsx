@@ -168,6 +168,8 @@ const PEN_IN = 200
 const WRITE = 750
 // Fast off the mark, easing into the full stop; the dot and the words share it so the pen stays on the edge of the ink
 const WRITE_EASE = 'cubic-bezier(0.55, 0, 0.25, 1)'
+// The page's signature curve (--ease-out-quart in landing.css), for pen down and pen up
+const EASE_OUT_QUART = 'cubic-bezier(0.165, 0.84, 0.44, 1)'
 function AgentLine({ text }: { text: string }) {
   const line = useRef<HTMLSpanElement>(null)
   const dot = useRef<HTMLSpanElement>(null)
@@ -184,7 +186,7 @@ function AgentLine({ text }: { text: string }) {
         { translate: start, opacity: 0, scale: 1.8 },
         { translate: start, opacity: 1, scale: 1 },
       ],
-      { duration: PEN_IN, easing: 'ease-out' },
+      { duration: PEN_IN, easing: EASE_OUT_QUART },
     )
     // Writing: the dot glides right and the words appear exactly up to it
     const writing = { delay: PEN_IN, duration: WRITE, easing: WRITE_EASE, fill: 'backwards' } as const
@@ -194,11 +196,11 @@ function AgentLine({ text }: { text: string }) {
       () => {},
     )
     // Pen up: a small settle into the full stop
-    el.animate([{ scale: 1.3 }, { scale: 1 }], { delay: PEN_IN + WRITE, duration: 220, easing: 'ease-out' })
+    el.animate([{ scale: 1.3 }, { scale: 1 }], { delay: PEN_IN + WRITE, duration: 220, easing: EASE_OUT_QUART })
   }, [])
   useEffect(() => {
     // Wait for the display font (the line's width) and for the first line's entrance
-    const timer = setTimeout(() => document.fonts.ready.then(run), 500)
+    const timer = setTimeout(() => document.fonts.ready.then(run), 300)
     return () => clearTimeout(timer)
   }, [run])
   // Both start hidden, so nothing shows in place before the agent writes it
@@ -256,7 +258,7 @@ function Hero() {
           alt="The documentation GitDoc Agent wrote for its own repository, fresh from a run"
           phone="generate-phone"
           priority
-          className="min-w-0 animate-in fade-in slide-in-from-bottom-6 fill-mode-both delay-300 duration-1000 ease-out-quart motion-reduce:animate-none"
+          className="min-w-0 animate-in fade-in slide-in-from-bottom-6 fill-mode-both delay-150 duration-700 ease-out-quart motion-reduce:animate-none"
         />
       </div>
     </section>
@@ -371,7 +373,7 @@ function HowItWorks() {
                     'absolute top-0.5 left-0 grid size-6 place-items-center rounded-full border-[3px] transition-[background-color,border-color,box-shadow] lg:top-0',
                     QUICK,
                     i < done
-                      ? 'border-foreground bg-foreground text-background'
+                      ? 'border-foreground bg-foreground text-background motion-safe:animate-[pop_220ms_cubic-bezier(0.165,0.84,0.44,1)]'
                       : i === done
                         ? 'border-foreground bg-background ring-4 ring-foreground/10'
                         : 'border-muted-foreground/40 bg-background',
@@ -537,9 +539,9 @@ function Limits() {
     <section id="limits" className="scroll-mt-16 border-t py-[var(--section-gap)]">
       <div className="container grid gap-x-8 gap-y-10 lg:grid-cols-12">
         <h2 className="reveal lg:col-span-4">How many runs do I get?</h2>
-        <dl className="lg:col-span-8">
+        <dl className="reveal lg:col-span-8">
           {LIMITS.map(([term, detail]) => (
-            <div key={term} className="reveal grid gap-1 border-t py-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr] sm:gap-8">
+            <div key={term} className="grid gap-1 border-t py-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr] sm:gap-8">
               <dt className="font-display text-title font-semibold tracking-[-0.015em]">{term}</dt>
               <dd className="text-lead text-muted-foreground">{detail}</dd>
             </div>
@@ -577,9 +579,9 @@ function GetBack() {
             hold passwords and keys are skipped, and any secret found in the code is hidden in the docs.
           </p>
         </div>
-        <ul className="mt-16 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="reveal mt-16 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
           {USES.map(([title, text]) => (
-            <li key={title} className="reveal border-t pt-6">
+            <li key={title} className="border-t pt-6">
               <h3>{title}</h3>
               <p className="mt-2 text-muted-foreground">{text}</p>
             </li>
