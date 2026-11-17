@@ -11,6 +11,18 @@ export default defineConfig(({ mode }) => {
   const webhookPath = env.N8N_WEBHOOK_PATH || '/webhook/doc-agent'
   const askPath = env.N8N_ASK_WEBHOOK_PATH || '/webhook/gitdoc-ask'
   const workflowId = env.N8N_WORKFLOW_ID || 'b6h5J6Rd4wfIh9Zs'
+  // /api/generate and /api/progress are served by guardPlugin itself
+  const proxy = {
+    // Token header added here; Ask can take 2+ minutes, so the timeouts are long
+    '/api/ask': {
+      target: n8n,
+      changeOrigin: true,
+      rewrite: () => askPath,
+      headers: { 'X-Webhook-Token': env.N8N_WEBHOOK_TOKEN ?? '' },
+      timeout: 300_000,
+      proxyTimeout: 300_000,
+    },
+  }
 
   return {
     // guardPlugin checks the session and rate limits before the proxy below forwards /api calls
@@ -29,24 +41,13 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    // `vite preview` has no guard, so it gets no proxy (it would otherwise copy server.proxy below)
-    preview: { proxy: {} },
+    // `vite preview` serves the build on Render, with the same guard and proxy as dev
+    preview: { proxy, allowedHosts: ['.onrender.com'] },
     server: {
       // One port only: a second server on 5174 would be another origin, with its own sign-in and saved state
       port: 5173,
       strictPort: true,
-      // /api/generate and /api/progress are served by guardPlugin itself
-      proxy: {
-        // Token header added here; Ask can take 2+ minutes, so the timeouts are long
-        '/api/ask': {
-          target: n8n,
-          changeOrigin: true,
-          rewrite: () => askPath,
-          headers: { 'X-Webhook-Token': env.N8N_WEBHOOK_TOKEN ?? '' },
-          timeout: 300_000,
-          proxyTimeout: 300_000,
-        },
-      },
+      proxy,
     },
   }
 })

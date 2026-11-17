@@ -1,0 +1,85 @@
+# Render Blueprint: n8n and the web app, both on the free plan. Setup steps: docs/deploy-render.md
+# `sync: false` values are secrets or per-project values: Render asks for them when the Blueprint is created.
+services:
+  # n8n. The free plan has no disk, so n8n keeps workflows and credentials in Supabase Postgres (schema n8n).
+  - type: web
+    name: gitdoc-n8n
+    runtime: image
+    image:
+      # Same version as the local n8n the workflows come from
+      url: docker.io/n8nio/n8n:2.32.6
+    plan: free
+    region: singapore
+    healthCheckPath: /healthz
+    envVars:
+      # Keep 5678: Generate Docs (Fast) calls Load Repo Code at http://localhost:5678
+      - key: PORT
+        value: "5678"
+      # Encrypts the saved credentials. Back it up; without it they cannot be read.
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: DB_TYPE
+        value: postgresdb
+      # Supabase session pooler (IPv4), from Connect > Session pooler, for example aws-0-ap-southeast-1.pooler.supabase.com
+      - key: DB_POSTGRESDB_HOST
+        sync: false
+      - key: DB_POSTGRESDB_PORT
+        value: "5432"
+      - key: DB_POSTGRESDB_DATABASE
+        value: postgres
+      # postgres.<project-ref>
+      - key: DB_POSTGRESDB_USER
+        sync: false
+      - key: DB_POSTGRESDB_PASSWORD
+        sync: false
+      - key: DB_POSTGRESDB_SCHEMA
+        value: n8n
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "true"
+      - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+      # Render's proxy sits in front
+      - key: N8N_PROXY_HOPS
+        value: "1"
+      # Executions hold repository files and share Supabase's 500 MB with the code vectors
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "72"
+      - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
+        value: "200"
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+
+  # The web app: `vite preview` serves the build and runs the API guard (server/guard.ts)
+  - type: web
+    name: gitdoc-web
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npx vite preview --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "22.18.0"
+      # https://<n8n service>.onrender.com, no trailing slash
+      - key: N8N_URL
+        sync: false
+      - key: N8N_WEBHOOK_TOKEN
+        sync: false
+      # Made in n8n after it is up: Settings > n8n API
+      - key: N8N_API_KEY
+        sync: false
+      - key: N8N_WEBHOOK_PATH
+        value: /webhook/doc-agent-fast
+      - key: N8N_ASK_WEBHOOK_PATH
+        value: /webhook/gitdoc-ask-supabase
+      # GitDoc - Generate Docs (Fast); the import keeps workflow ids
+      - key: N8N_WORKFLOW_ID
+        value: WFZUYhnaVFYPtUeo
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false

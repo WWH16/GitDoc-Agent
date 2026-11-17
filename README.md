@@ -30,7 +30,8 @@ questions grounded in that code.
 Paste a URL, watch the run step by step, read the result, and download it.
 
 > [!NOTE]
-> The project runs locally next to an n8n instance. It is not hosted yet. See [Project status](#project-status).
+> The project runs locally next to an n8n instance, or on Render's free plan with [`render.yaml`](render.yaml). See
+> [Deploying to Render](docs/deploy-render.md) and [Project status](#project-status).
 
 ## Features
 
@@ -193,7 +194,7 @@ The dev server uses port 5173 only (`strictPort`), because a second port would b
 | --- | --- |
 | `npm run dev` | Starts the Vite dev server with the API guard and proxy |
 | `npm run build` | Type-checks and builds the landing page and the app into `dist/` |
-| `npm run preview` | Serves the build. It has **no** `/api` proxy, so Generate and Ask do not work there |
+| `npm run preview` | Serves the build with the same API guard and proxy as dev. Render runs the app this way |
 | `npm test` | Runs the unit tests in `src/` and `server/` |
 | `npm run smoke` | Calls the live n8n webhooks to check the workflows (uses a few free-tier LLM calls) |
 | `npm run lint` | Runs oxlint |
@@ -278,8 +279,8 @@ workflow is active and reports errors to GitDoc - Error Log.
 
 GitDoc Agent works end to end on a local machine. These items are still open:
 
-- **No production server.** The API guard and proxy run only inside `npm run dev`. Deployment would move
-  `server/guard.ts` to serverless functions (it is written as plain functions for that reason) and host n8n separately.
+- **Free hosting only.** [`render.yaml`](render.yaml) runs n8n and the app on Render's free plan, where both sleep after
+  15 minutes without traffic and n8n has 512 MB of memory. See [Deploying to Render](docs/deploy-render.md).
 - **Public repositories only.** Private repositories need GitHub sign-in, which does not exist yet.
 - **Long waits.** A Generate run usually takes a few minutes. An Ask answer can take up to two minutes on the free Gemini
   tier.

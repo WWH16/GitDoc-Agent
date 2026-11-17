@@ -163,6 +163,13 @@ test('the IP limit ignores a client-set X-Forwarded-For', () => {
   assert.equal(clientIp({ headers: { 'x-forwarded-for': '9.9.9.9' }, socket: { remoteAddress: '1.2.3.4' } }), '1.2.3.4')
 })
 
+test('True-Client-IP counts only on Render', () => {
+  const req = { headers: { 'true-client-ip': '9.9.9.9' }, socket: { remoteAddress: '1.2.3.4' } }
+  assert.equal(clientIp(req), '1.2.3.4')
+  assert.equal(clientIp(req, true), '9.9.9.9')
+  assert.equal(clientIp({ headers: {}, socket: { remoteAddress: '1.2.3.4' } }, true), '1.2.3.4')
+})
+
 test('Supabase unreachable is not an expired session', () => {
   const failed = (status?: number) => ({ data: { user: null }, error: { message: 'x', status } })
   assert.throws(() => userFrom(failed(0)))

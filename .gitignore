@@ -26,6 +26,8 @@ dist-ssr
 # Secrets (n8n API key, webhook token)
 .env
 pinecone credentials.txt
+# n8n export for the Render move (docs/deploy-render.md): plain-text credentials
+migrate/
 .claude/
 brand
 # Hallmark audit records

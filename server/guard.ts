@@ -154,13 +154,17 @@ export async function progressFor(runId: string, list: (query: string) => Promis
   return null
 }
 
-/** Vite dev-server middleware that runs `guard` before the /api proxy forwards anything to n8n. */
+/** Vite middleware that runs `guard` before the /api proxy forwards anything to n8n: in `vite` (dev) and in
+ *  `vite preview` (the hosted app on Render serves the build that way). */
 export function guardPlugin(env: Record<string, string>): Plugin {
   return {
     name: 'gitdoc-api-guard',
-    // Dev server only: a build has no proxy, and its environment may not hold the service key
+    // Not in `vite build`: the bundle never gets the guard or its keys
     apply: 'serve',
     configureServer(server) {
+      server.middlewares.use('/api', apiGuard(env))
+    },
+    configurePreviewServer(server) {
       server.middlewares.use('/api', apiGuard(env))
     },
   }
@@ -209,7 +213,8 @@ function apiGuard(env: Record<string, string>) {
 
   async function handle(req: IncomingMessage & { originalUrl?: string }, res: ServerResponse, next: () => void) {
     const path = new URL(req.originalUrl ?? req.url ?? '', 'http://localhost').pathname
-    const ip = clientIp(req)
+    // Render sets RENDER=true in every service it runs
+    const ip = clientIp(req, env.RENDER === 'true')
     const isGenerate = path === '/api/generate'
     const result = await guard({ path, ip, authorization: req.headers.authorization ?? null }, deps, !isGenerate)
     if (!('user' in result)) {
@@ -266,10 +271,12 @@ function apiGuard(env: Record<string, string>) {
   }
 }
 
-/** The caller's address for the per-IP limits. X-Forwarded-For is ignored: nothing in front of the dev server sets it,
- *  so a client could send a new one on every call. Behind a proxy (Vercel), use the address that proxy adds. */
-export function clientIp(req: { headers: Record<string, string | string[] | undefined>; socket: { remoteAddress?: string } }) {
-  return req.socket.remoteAddress ?? ''
+/** The caller's address for the per-IP limits. X-Forwarded-For is ignored: a client can set it, and Render only appends
+ *  to it. On Render (`onRender`), every request comes through Cloudflare, which overwrites True-Client-IP with the real
+ *  address. Off Render nothing sets that header, so a client could fake it; there the socket address is used. */
+export function clientIp(req: { headers: Record<string, string | string[] | undefined>; socket: { remoteAddress?: string } }, onRender = false) {
+  const real = req.headers['true-client-ip']
+  return (onRender && typeof real === 'string' && real) || req.socket.remoteAddress || ''
 }
 
 /** The user id from auth.getUser: null for a token Supabase rejected (4xx), a throw when Supabase could not answer
