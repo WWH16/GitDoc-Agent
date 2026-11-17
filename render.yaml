@@ -38,6 +38,16 @@ services:
         value: "true"
       - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
         value: "false"
+      # n8n pings the database every 2 s with a 5 s timeout over a pool of 2. On 0.1 CPU, with both connections busy,
+      # the pings timed out ("Database ping failed"). More connections, slower pings, longer timeouts.
+      - key: DB_POSTGRESDB_POOL_SIZE
+        value: "5"
+      - key: DB_PING_INTERVAL_SECONDS
+        value: "30"
+      - key: DB_PING_TIMEOUT_MS
+        value: "30000"
+      - key: DB_POSTGRESDB_CONNECTION_TIMEOUT
+        value: "60000"
       # Render's proxy sits in front
       - key: N8N_PROXY_HOPS
         value: "1"
